@@ -17,35 +17,64 @@ export async function POST(req: NextRequest) {
 
         const apiUrl = "https://openrouter.ai/api/v1/chat/completions";
 
-        const payload = {
+        // Ask the upstream API to stream responses if supported.
+        const payload: any = {
             model: "meta-llama/llama-3.3-70b-instruct",
             messages: [
                 { role: "system", content: context || "You are AuraIQ, a helpful and intelligent AI assistant." },
                 { role: "user", content: input }
-            ]
+            ],
+            // Request streaming. If the upstream API accepts a different flag, this will still work
+            // because we fall back to piping non-streaming JSON as a single chunk.
+            stream: true
         };
 
-        const response = await fetch(apiUrl, {
+        const upstream = await fetch(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`,
-                'HTTP-Referer': 'http://localhost:3000', 
+                'HTTP-Referer': 'http://localhost:3000',
                 'X-Title': 'AuraIQ',
             },
             body: JSON.stringify(payload)
         });
 
-        if (!response.ok) {
-             const errorBody = await response.text();
-             console.error("OpenRouter API Error:", errorBody);
-             throw new Error(`OpenRouter API error: ${response.statusText}`);
+        if (!upstream.ok || !upstream.body) {
+            const errorBody = await upstream.text();
+            console.error("OpenRouter API Error:", errorBody);
+            return NextResponse.json({ error: `OpenRouter API error: ${upstream.statusText}` }, { status: 502 });
         }
 
-        const result = await response.json();
-        const aiText = result.choices?.[0]?.message?.content;
+        // Create a ReadableStream that pipes upstream chunks directly to the client.
+        const stream = new ReadableStream({
+            async start(controller) {
+                const reader = upstream.body!.getReader();
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        // forward the raw chunk bytes
+                        controller.enqueue(value);
+                    }
+                } catch (err) {
+                    console.error('Error while reading upstream stream:', err);
+                } finally {
+                    controller.close();
+                    try { reader.releaseLock(); } catch (e) {}
+                }
+            }
+        });
 
-        return NextResponse.json({ text: aiText || "No response text." });
+        // Return a streaming response to the client. Use text/event-stream to allow
+        // the browser/client to progressively consume text chunks.
+        return new Response(stream, {
+            headers: {
+                'Content-Type': 'text/event-stream; charset=utf-8',
+                'Cache-Control': 'no-cache, no-transform',
+                'Connection': 'keep-alive'
+            }
+        });
 
     } catch (error) {
         // Changed `error: any` to `error` and casting to `Error` for type safety
@@ -54,4 +83,3 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 }
-
