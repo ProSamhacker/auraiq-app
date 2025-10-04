@@ -58,8 +58,9 @@ const AuthComponent: FC<{ auth: Auth }> = ({ auth }) => {
             } else {
                 await createUserWithEmailAndPassword(auth, email, password);
             }
-        } catch (err: any) {
-            setError(err.message.replace('Firebase: ', ''));
+        } catch (err) {
+            const errorMessage = (err instanceof Error) ? err.message : "An unknown error occurred";
+            setError(errorMessage.replace('Firebase: ', ''));
         } finally {
             setIsLoading(false);
         }
@@ -101,11 +102,9 @@ const ChatInterface: FC<{ user: User; auth: Auth; db: Firestore }> = ({ user, au
   const [isLoading, setIsLoading] = useState(false);
   const [context, setContext] = useState<string>('');
   const chatEndRef = useRef<HTMLDivElement>(null);
-  
   const isInitialLoad = useRef(true);
 
-  // Load user's chat history from Firestore. This is now the ONLY place
-  // that the chat list (`chats` state) gets updated.
+  // Load user's chat history from Firestore.
   useEffect(() => {
     if (!user) return;
     
@@ -117,7 +116,6 @@ const ChatInterface: FC<{ user: User; auth: Auth; db: Firestore }> = ({ user, au
         });
         setChats(userChats);
         
-        // On the very first load, automatically select the most recent chat.
         if (isInitialLoad.current && userChats.length > 0) {
             setCurrentChatId(userChats[0].id);
             isInitialLoad.current = false;
@@ -127,13 +125,12 @@ const ChatInterface: FC<{ user: User; auth: Auth; db: Firestore }> = ({ user, au
     return () => unsubscribe();
   }, [user, db]);
 
-  // This effect ensures the chat window always scrolls to the bottom.
+  // Scroll to the bottom of the chat when messages change.
   useEffect(() => { 
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); 
-  }, [chats, currentChatId]); // Re-scroll whenever the chats list or selected chat changes.
+  }, [chats, currentChatId]);
 
-  // The messages on screen are now a "derived" state. They are always
-  // calculated directly from the `chats` state, the single source of truth.
+  // Derive the messages for the currently selected chat. This is the single source of truth.
   const messages = chats.find(chat => chat.id === currentChatId)?.messages || [];
 
   const handleNewChat = () => { 
@@ -168,15 +165,13 @@ const ChatInterface: FC<{ user: User; auth: Auth; db: Firestore }> = ({ user, au
         let existingMessages: Message[] = [];
 
         if (tempChatId) {
-            // If we're in an existing chat, get its reference and messages
             chatRef = doc(db, 'users', user.uid, 'chats', tempChatId);
             const currentChat = chats.find(c => c.id === tempChatId);
             existingMessages = currentChat?.messages || [];
         } else {
-            // If it's a new chat, create a new document in Firestore first
             const newChatRef = await addDoc(collection(db, 'users', user.uid, 'chats'), {
                 title: tempInput.substring(0, 30) + (tempInput.length > 30 ? '...' : ''),
-                messages: [], // Start with no messages
+                messages: [],
                 timestamp: Date.now(),
             });
             chatRef = newChatRef;
@@ -184,30 +179,24 @@ const ChatInterface: FC<{ user: User; auth: Auth; db: Firestore }> = ({ user, au
             setCurrentChatId(newChatRef.id);
         }
         
-        // **One-Way Data Flow Step 1:** Save the user's message to Firestore.
-        // The `onSnapshot` listener will automatically see this and update the UI.
         const updatedMessages = [...existingMessages, userMessage];
         await setDoc(chatRef, { messages: updatedMessages }, { merge: true });
 
-        // **One-Way Data Flow Step 2:** Call the AI.
         const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: tempInput, context }) });
         if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || 'API error'); }
         
         const result = await response.json();
         const aiMessage: Message = { id: (Date.now() + 1).toString(), text: result.text, sender: 'ai' };
         
-        // **One-Way Data Flow Step 3:** Save the AI's response to Firestore.
-        // The `onSnapshot` listener will see this update and add the AI's message to the UI.
         await setDoc(chatRef, { messages: [...updatedMessages, aiMessage], timestamp: Date.now() }, { merge: true });
 
-    } catch (error: any) {
+    } catch (error) {
         console.error("API call failed:", error);
         if(tempChatId) {
-            // If there's an error, save an error message to the chat so the user knows.
-            const errorMessage: Message = { id: (Date.now() + 1).toString(), text: `Error: ${error.message}`, sender: 'ai' };
+            const errorMessageText = (error instanceof Error) ? error.message : "An unknown error occurred";
+            const errorMessage: Message = { id: (Date.now() + 1).toString(), text: `Error: ${errorMessageText}`, sender: 'ai' };
             const chatRef = doc(db, 'users', user.uid, 'chats', tempChatId);
             const currentChat = chats.find(c => c.id === tempChatId);
-            // We use optional chaining here in case the chat was deleted in the meantime
             const existingMessagesOnError = currentChat?.messages || [userMessage];
             await setDoc(chatRef, { messages: [...existingMessagesOnError, errorMessage] }, { merge: true });
         }
