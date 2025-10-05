@@ -9,7 +9,7 @@ import { Chat, Message } from "../lib/types";
 import Sidebar from "./Sidebar";
 import ContextPanel from "./ContextPanel";
 import ChatBubble from "./ChatBubble";
-import { BotIcon, SendIcon, MenuIcon } from "./Icons";
+import { BotIcon, SendIcon, MenuIcon, BrainCircuitIcon } from "./Icons";
 
 interface ChatInterfaceProps {
   user: User;
@@ -25,10 +25,10 @@ const ChatInterface: FC<ChatInterfaceProps> = ({ user, auth, db }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [context, setContext] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isContextPanelOpen, setIsContextPanelOpen] = useState(false); 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const isInitialLoad = useRef(true);
 
-  // Firestore listeners and message handling logic remain here...
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, "users", user.uid, "chats"), orderBy("timestamp", "desc"));
@@ -178,12 +178,14 @@ const ChatInterface: FC<ChatInterfaceProps> = ({ user, auth, db }) => {
       {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="absolute inset-0 bg-black/50 z-10 md:hidden"></div>}
 
       <div className="flex-grow flex flex-col">
-         {/* Mobile Header */}
-        <div className="p-4 border-b border-gray-700 flex items-center md:hidden">
+        <div className="p-4 border-b border-gray-700 flex items-center justify-between md:hidden">
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 rounded-md hover:bg-gray-700">
             <MenuIcon className="w-6 h-6" />
           </button>
-          <h2 className="ml-4 font-bold text-lg">AuraIQ</h2>
+          <h2 className="font-bold text-lg">AuraIQ</h2>
+          <button onClick={() => setIsContextPanelOpen(true)} className="p-2 rounded-md hover:bg-gray-700">
+            <BrainCircuitIcon className="w-6 h-6" />
+          </button>
         </div>
 
         <div className="flex-grow p-6 overflow-y-auto">
@@ -216,8 +218,15 @@ const ChatInterface: FC<ChatInterfaceProps> = ({ user, auth, db }) => {
           </form>
         </div>
       </div>
+      
+      {isContextPanelOpen && <div onClick={() => setIsContextPanelOpen(false)} className="absolute inset-0 bg-black/50 z-10 lg:hidden"></div>}
 
-      <ContextPanel context={context} setContext={setContext} />
+      <ContextPanel 
+        context={context} 
+        setContext={setContext}
+        isOpen={isContextPanelOpen}
+        onClose={() => setIsContextPanelOpen(false)}
+      />
     </main>
   );
 };

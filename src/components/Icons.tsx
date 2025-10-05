@@ -43,3 +43,43 @@ export const MenuIcon: FC<SVGProps<SVGSVGElement>> = (props) => (
     <line x1="4" x2="20" y1="12" y2="12" /><line x1="4" x2="20" y1="6" y2="6" /><line x1="4" x2="20" y1="18" y2="18" />
   </svg>
 );
+
+// src/components/Icons.tsx
+
+// ... (keep all existing icons) ...
+
+export const BrainCircuitIcon: FC<SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 5a3 3 0 1 0-5.993.129" />
+    <path d="M12 5a3 3 0 1 1 5.993.129" />
+    <path d="M15 12a3 3 0 1 0-5.993.129" />
+    <path d="M15 12a3 3 0 1 1 5.993.129" />
+    <path d="M9 12a3 3 0 1 0-5.993.129" />
+    <path d="M9 12a3 3 0 1 1 5.993.129" />
+    <path d="M12 19a3 3 0 1 0-5.993.129" />
+    <path d="M12 19a3 3 0 1 1 5.993.129" />
+    <path d="M12 12h.01" />
+    <path d="M12 12v.01" />
+    <path d="M12 12h-.01" />
+    <path d="M12 12v-.01" />
+    <path d="M12 5v3" />
+    <path d="m15 7-3 2" />
+    <path d="m9 7 3 2" />
+    <path d="M12 19v-3" />
+    <path d="m15 17-3-2" />
+    <path d="m9 17 3-2" />
+    <path d="M9 12h-3" />
+    <path d="m7 15-2-3" />
+    <path d="m7 9-2 3" />
+    <path d="M15 12h3" />
+    <path d="m17 15 2-3" />
+    <path d="m17 9 2 3" />
+  </svg>
+);
+
+export const XIcon: FC<SVGProps<SVGSVGElement>> = (props) => (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+);

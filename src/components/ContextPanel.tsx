@@ -1,19 +1,32 @@
 // src/components/ContextPanel.tsx
 
 import { FC } from "react";
+import { XIcon } from "./Icons"; // Import the close icon
 
 interface ContextPanelProps {
   context: string;
   setContext: (context: string) => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-const ContextPanel: FC<ContextPanelProps> = ({ context, setContext }) => {
+const ContextPanel: FC<ContextPanelProps> = ({ context, setContext, isOpen, onClose }) => {
   return (
-    // Hidden by default, shown on large screens
-    <div className="hidden lg:flex lg:w-1/4 bg-gray-800 flex-col border-l border-gray-700">
-      <div className="p-4 border-b border-gray-700">
-        <h2 className="text-lg font-semibold text-gray-300">Context & Memory</h2>
-        <p className="text-sm text-gray-500">Provide persistent context for the AI.</p>
+    // Updated classes to handle mobile overlay and desktop static view
+    <div
+      className={`absolute top-0 right-0 h-full w-full max-w-xs bg-gray-800 flex-col border-l border-gray-700
+                  transition-transform transform ${isOpen ? "translate-x-0" : "translate-x-full"} 
+                  lg:static lg:translate-x-0 lg:flex lg:w-1/4 z-20`}
+    >
+      <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+        <div>
+            <h2 className="text-lg font-semibold text-gray-300">Context & Memory</h2>
+            <p className="text-sm text-gray-500">Provide persistent context for the AI.</p>
+        </div>
+        {/* Close button for mobile view */}
+        <button onClick={onClose} className="p-2 rounded-md hover:bg-gray-700 lg:hidden">
+            <XIcon className="w-6 h-6" />
+        </button>
       </div>
       <div className="flex-grow p-4">
         <textarea
