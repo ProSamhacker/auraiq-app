@@ -6,8 +6,6 @@ import { useState, FC, FormEvent, useEffect, useRef } from 'react';
 import { User, Auth } from 'firebase/auth';
 import { Firestore, collection, query, orderBy, onSnapshot, doc, addDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { Chat, Message } from '../lib/types';
-
-// Import the new Desktop Sidebar
 import GeminiDesktopSidebar from './GeminiDesktopSidebar'; 
 import GeminiSidebar from './GeminiSidebar';
 import ChatInput from './ChatInput';
@@ -22,7 +20,6 @@ interface GeminiLayoutProps {
 }
 
 const WelcomeScreen: FC<{ userName: string | null }> = ({ userName }) => (
-    // ... WelcomeScreen component remains the same
     <div className="flex flex-col items-center justify-center h-full text-center">
         <h1 className="text-4xl md:text-5xl font-bold text-blue-400 mb-4">
             Hello, {userName || 'User'}
@@ -39,11 +36,8 @@ const WelcomeScreen: FC<{ userName: string | null }> = ({ userName }) => (
 );
 
 const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
-    // State is now just for the slide-out panel
     const [isSlideoutOpen, setIsSlideoutOpen] = useState(false);
     const [isContextPanelOpen, setIsContextPanelOpen] = useState(false);
-
-    // All your existing chat logic remains the same
     const [chats, setChats] = useState<Chat[]>([]);
     const [currentChatId, setCurrentChatId] = useState<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -53,7 +47,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const chatEndRef = useRef<HTMLDivElement>(null);
     const isInitialLoad = useRef(true);
 
-    // All handler functions and useEffects remain the same
     useEffect(() => {
         if (!user) return;
         const q = query(collection(db, "users", user.uid, "chats"), orderBy("timestamp", "desc"));
@@ -105,7 +98,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       };
 
       const handleSendMessage = async (e: FormEvent) => {
-        // ... this entire function remains unchanged
         e.preventDefault();
         if (!input.trim() || isLoading) return;
         const userMessage: Message = { id: crypto.randomUUID(), text: input, sender: "user" };
@@ -113,9 +105,11 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         setInput("");
         setIsLoading(true);
         let tempChatId = currentChatId;
+    
         try {
             let chatRef;
             let existingMessages = messages;
+    
             if (!tempChatId) {
                 const newChatRef = await addDoc(collection(db, "users", user.uid, "chats"), {
                     title: tempInput.substring(0, 30) + (tempInput.length > 30 ? "..." : ""),
@@ -130,19 +124,24 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                 chatRef = doc(db, "users", user.uid, "chats", tempChatId);
                 await setDoc(chatRef, { messages: [...existingMessages, userMessage] }, { merge: true });
             }
+    
+            const contextToSend = isContextPanelOpen ? context : "";
+
             const response = await fetch("/api/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ input: tempInput, context }),
+                body: JSON.stringify({ input: tempInput, context: contextToSend }),
             });
             if (!response.ok || !response.body) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || "API error");
             }
+    
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let fullResponse = "";
             const aiMessageId = crypto.randomUUID();
+    
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
@@ -161,13 +160,15 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                                 const updatedMessages = Array.from(new Map([...existingMessages, userMessage, streamingAIMessage].map(m => [m.id, m])).values());
                                 await setDoc(chatRef, { messages: updatedMessages }, { merge: true });
                             }
-                        } catch { /* Ignore parsing errors */ }
+                        } catch { }
                     }
                 }
             }
+            
             const finalAIMessage: Message = { id: aiMessageId, text: fullResponse, sender: "ai" };
             const finalMessages = Array.from(new Map([...existingMessages, userMessage, finalAIMessage].map(m => [m.id, m])).values());
             await setDoc(chatRef, { messages: finalMessages, timestamp: Date.now() }, { merge: true });
+    
         } catch (error) {
             console.error("API call failed:", error);
             const errorMessageText = error instanceof Error ? error.message : "An unknown error occurred";
@@ -185,13 +186,12 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const uniqueMessages = Array.from(new Map(messages.map((m) => [m.id, m])).values());
 
     return (
-        <div className="flex h-screen bg-[#131314] text-white">
-            {/* The static desktop sidebar is now part of the flex layout */}
+        // MODIFICATION: Changed h-screen to h-full
+        <div className="flex h-full bg-[#131314] text-white">
             <GeminiDesktopSidebar 
                 onNewChat={handleNewChat} 
                 toggleMobileSidebar={() => setIsSlideoutOpen(true)} 
             />
-            {/* The slide-out sidebar is a separate component that appears on top */}
             <GeminiSidebar 
                 isOpen={isSlideoutOpen} 
                 onClose={() => setIsSlideoutOpen(false)} 
@@ -202,7 +202,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                 onDeleteChat={handleDeleteChat}
             />
 
-            {/* The margin is gone, flexbox handles the layout now */}
             <main className="flex-grow flex flex-col relative">
                 <header className="flex items-center justify-between p-4 md:hidden">
                     <button onClick={() => setIsSlideoutOpen(true)} className="p-2 rounded-full hover:bg-gray-800">
