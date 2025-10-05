@@ -20,18 +20,12 @@ interface GeminiLayoutProps {
 }
 
 const WelcomeScreen: FC<{ userName: string | null }> = ({ userName }) => (
-    <div className="flex flex-col items-center justify-center h-full text-center">
-        <h1 className="text-4xl md:text-5xl font-bold text-blue-400 mb-4">
+    <div className="flex flex-col items-center justify-center h-full text-center px-4">
+        <h1 className="text-4xl md:text-5xl font-bold text-blue-400 mb-4 break-all">
             Hello, {userName || 'User'}
         </h1>
         <p className="text-gray-400 text-lg mb-8">How can I help you today?</p>
-        <div className="flex flex-wrap justify-center gap-4">
-            {['Create Image', 'Write', 'Build', 'Deep Research', 'Create Video'].map(item => (
-                <button key={item} className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium py-2 px-5 rounded-full transition-colors">
-                    {item}
-                </button>
-            ))}
-        </div>
+        {/* MODIFICATION: The div containing the suggestion buttons has been removed from here. */}
     </div>
 );
 
@@ -186,7 +180,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const uniqueMessages = Array.from(new Map(messages.map((m) => [m.id, m])).values());
 
     return (
-        // MODIFICATION: Changed h-screen to h-full
         <div className="flex h-full bg-[#131314] text-white">
             <GeminiDesktopSidebar 
                 onNewChat={handleNewChat} 
