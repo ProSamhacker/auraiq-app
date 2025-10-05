@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { User, onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
 import AuthComponent from "../components/AuthComponent";
-import ChatInterface from "../components/ChatInterface";
+import GeminiLayout from "../components/GeminiLayout"; // <-- IMPORT THE NEW LAYOUT
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -29,7 +29,8 @@ export default function Home() {
   }
 
   return user ? (
-    <ChatInterface user={user} auth={auth} db={db} />
+    // <-- USE THE NEW LAYOUT COMPONENT
+    <GeminiLayout user={user} auth={auth} db={db} />
   ) : (
     <AuthComponent auth={auth} />
   );
