@@ -1,10 +1,18 @@
+// src/app/api/chat/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "nodejs"; // ✅ Ensures it runs in Node.js, not Edge
+export const runtime = "nodejs";
+
+type HistoryMessage = {
+  id: string;
+  text: string;
+  sender: 'user' | 'ai';
+};
 
 export async function POST(req: NextRequest) {
   try {
-    const { input, context } = await req.json();
+    const { input, context, history } = await req.json();
 
     if (!input) {
       return NextResponse.json({ error: "Missing required 'input' parameter" }, { status: 400 });
@@ -17,10 +25,21 @@ export async function POST(req: NextRequest) {
 
     const apiUrl = "https://openrouter.ai/api/v1/chat/completions";
 
+    const formattedHistory = (history as HistoryMessage[] || []).map(msg => ({
+      role: msg.sender === 'user' ? 'user' : 'assistant',
+      content: msg.text
+    }));
+
+    const systemMessage = {
+      role: "system",
+      content: (context || "You are AuraIQ, a helpful and intelligent AI assistant.") + " Always format your responses using Markdown. Use lists, bold text, and code blocks when appropriate."
+    };
+
     const payload = {
-      model: "meta-llama/llama-3.3-70b-instruct",
+      model: "deepseek/deepseek-chat-v3.1:free",
       messages: [
-        { role: "system", content: context || "You are AuraIQ, a helpful and intelligent AI assistant." },
+        systemMessage,
+        ...formattedHistory,
         { role: "user", content: input }
       ],
       stream: true
@@ -46,8 +65,7 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         const reader = upstream.body!.getReader();
-        const decoder = new TextDecoder();
-
+        // MODIFICATION: Removed the unused 'decoder' variable
         try {
           while (true) {
             const { done, value } = await reader.read();

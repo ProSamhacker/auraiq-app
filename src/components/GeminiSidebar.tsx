@@ -1,7 +1,8 @@
 // src/components/GeminiSidebar.tsx
 
-import { FC } from "react";
-import { PlusIcon, MenuIcon, TrashIcon } from "./Icons";
+import { FC, useState, KeyboardEvent } from "react";
+// MODIFICATION: Import Pencil icon
+import { PlusIcon, MenuIcon, TrashIcon, Pencil } from "lucide-react";
 import { Chat } from "../lib/types";
 
 interface GeminiSidebarProps {
@@ -12,12 +13,39 @@ interface GeminiSidebarProps {
   currentChatId: string | null;
   onSelectChat: (id: string) => void;
   onDeleteChat: (id: string) => void;
+  // MODIFICATION: Add onRenameChat to props
+  onRenameChat: (id: string, newTitle: string) => void;
 }
 
-const GeminiSidebar: FC<GeminiSidebarProps> = ({ isOpen, onClose, onNewChat, chats, currentChatId, onSelectChat, onDeleteChat }) => {
+const GeminiSidebar: FC<GeminiSidebarProps> = ({ isOpen, onClose, onNewChat, chats, currentChatId, onSelectChat, onDeleteChat, onRenameChat }) => {
+  // MODIFICATION: Add state to manage which chat is being edited
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+
+  const handleEditClick = (chat: Chat) => {
+    setEditingChatId(chat.id);
+    setEditText(chat.title);
+  };
+
+  const handleSaveRename = () => {
+    if (editingChatId && editText.trim()) {
+      onRenameChat(editingChatId, editText);
+    }
+    setEditingChatId(null);
+    setEditText("");
+  };
+  
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSaveRename();
+    } else if (e.key === 'Escape') {
+      setEditingChatId(null);
+      setEditText("");
+    }
+  };
+
   return (
     <>
-      {/* This is ONLY the slide-out drawer now */}
       <div
         className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#1e1f20] text-white flex flex-col transition-transform duration-300 ease-in-out
                     ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
@@ -42,22 +70,37 @@ const GeminiSidebar: FC<GeminiSidebarProps> = ({ isOpen, onClose, onNewChat, cha
                 {chats.map((chat) => (
                     <div 
                         key={chat.id} 
-                        onClick={() => onSelectChat(chat.id)} 
-                        className={`flex justify-between items-center p-3 rounded-lg cursor-pointer transition-colors ${currentChatId === chat.id ? "bg-blue-600/30" : "hover:bg-gray-700/50"}`}
+                        onClick={() => editingChatId !== chat.id && onSelectChat(chat.id)} 
+                        className={`group flex justify-between items-center p-3 rounded-lg transition-colors ${currentChatId === chat.id ? "bg-blue-600/30" : "hover:bg-gray-700/50"} ${editingChatId !== chat.id ? 'cursor-pointer' : ''}`}
                     >
-                        <p className="truncate text-sm font-medium">{chat.title}</p>
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); onDeleteChat(chat.id); }} 
-                            className="p-1 rounded-md text-gray-500 hover:text-red-400 opacity-50 hover:opacity-100"
-                        >
-                            <TrashIcon className="w-4 h-4" />
-                        </button>
+                        {editingChatId === chat.id ? (
+                            <input
+                                type="text"
+                                value={editText}
+                                onChange={(e) => setEditText(e.target.value)}
+                                onBlur={handleSaveRename}
+                                onKeyDown={handleKeyDown}
+                                autoFocus
+                                className="bg-transparent border border-blue-500 rounded-md w-full text-sm font-medium p-1 focus:outline-none"
+                            />
+                        ) : (
+                            <>
+                                <p className="truncate text-sm font-medium">{chat.title}</p>
+                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={(e) => { e.stopPropagation(); handleEditClick(chat); }} className="p-1 rounded-md text-gray-400 hover:text-white">
+                                        <Pencil className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); onDeleteChat(chat.id); }} className="p-1 rounded-md text-gray-400 hover:text-red-400">
+                                        <TrashIcon className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 ))}
             </div>
         </div>
       </div>
-      {/* Backdrop */}
       {isOpen && <div onClick={onClose} className="fixed inset-0 bg-black/50 z-30"></div>}
     </>
   );

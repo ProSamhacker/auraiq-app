@@ -4,17 +4,14 @@
 
 import { useState, FC, FormEvent, useEffect, useRef } from 'react';
 import { User, Auth, signOut } from 'firebase/auth';
-import { Firestore, collection, query, orderBy, onSnapshot, doc, addDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { Firestore, collection, query, orderBy, onSnapshot, doc, addDoc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { Chat, Message } from '../lib/types';
 import GeminiDesktopSidebar from './GeminiDesktopSidebar'; 
 import GeminiSidebar from './GeminiSidebar';
 import ChatInput from './ChatInput';
 import ContextPanel from './ContextPanel';
 import ChatBubble from './ChatBubble';
-
-// MODIFICATION: Import Brain and Pencil from the new library
-import { Brain, BrainCircuit } from 'lucide-react'; 
-// MODIFICATION: No longer need BrainPencilIcon from the local file
+import { BrainCircuit } from 'lucide-react'; 
 import { MenuIcon, UserIcon, LogoutIcon } from './Icons';
 
 interface GeminiLayoutProps {
@@ -33,6 +30,8 @@ const WelcomeScreen: FC<{ userName: string | null }> = ({ userName }) => (
 );
 
 const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
+    const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
     const [isContextActive, setIsContextActive] = useState(false);
     const [isContextPanelOpen, setIsContextPanelOpen] = useState(false);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -46,12 +45,11 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const chatEndRef = useRef<HTMLDivElement>(null);
     const isInitialLoad = useRef(true);
 
-    // All handler functions and useEffects remain the same...
     useEffect(() => {
         setTimeout(() => {
             chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
         }, 100);
-    }, [messages]);
+    }, [messages, streamingMessage]);
     
     useEffect(() => {
         if (!user) return;
@@ -99,19 +97,36 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         }
       };
 
+      const handleRenameChat = async (chatId: string, newTitle: string) => {
+        if (!chatId || !newTitle.trim()) return;
+        const chatRef = doc(db, "users", user.uid, "chats", chatId);
+        await updateDoc(chatRef, { title: newTitle.trim() });
+      };
+
+      const handleStopGenerating = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            setIsLoading(false);
+        }
+      };
+
       const handleSendMessage = async (e: FormEvent) => {
         e.preventDefault();
         if (!input.trim() || isLoading) return;
+
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
+
         const userMessage: Message = { id: Date.now().toString(), text: input, sender: "user" };
         const tempInput = input;
+        const newMessages = [...messages, userMessage];
+        setMessages(newMessages);
         setInput("");
         setIsLoading(true);
         let tempChatId = currentChatId;
-    
+
         try {
             let chatRef;
-            let existingMessages = messages;
-    
             if (!tempChatId) {
                 const newChatRef = await addDoc(collection(db, "users", user.uid, "chats"), {
                     title: tempInput.substring(0, 30) + (tempInput.length > 30 ? "..." : ""),
@@ -121,29 +136,33 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                 chatRef = newChatRef;
                 tempChatId = newChatRef.id;
                 setCurrentChatId(newChatRef.id);
-                existingMessages = [userMessage];
             } else {
                 chatRef = doc(db, "users", user.uid, "chats", tempChatId);
-                await setDoc(chatRef, { messages: [...existingMessages, userMessage] }, { merge: true });
+                await setDoc(chatRef, { messages: newMessages }, { merge: true });
             }
-    
-            const contextToSend = isContextActive ? context : "";
 
+            const contextToSend = isContextActive ? context : "";
             const response = await fetch("/api/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ input: tempInput, context: contextToSend }),
+                body: JSON.stringify({
+                    input: tempInput,
+                    context: contextToSend,
+                    history: messages
+                }),
+                signal: abortController.signal,
             });
+
             if (!response.ok || !response.body) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || "API error");
             }
-    
+
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            let fullResponse = "";
             const aiMessageId = (Date.now() + 1).toString();
-    
+            setStreamingMessage({ id: aiMessageId, text: "", sender: "ai" });
+
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
@@ -157,39 +176,52 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                             const parsed = JSON.parse(data);
                             const delta = parsed.choices?.[0]?.delta?.content;
                             if (delta) {
-                                fullResponse += delta;
-                                const streamingAIMessage: Message = { id: aiMessageId, text: fullResponse + "▋", sender: "ai" };
-                                const updatedMessages = Array.from(new Map([...existingMessages, userMessage, streamingAIMessage].map(m => [m.id, m])).values());
-                                await setDoc(chatRef, { messages: updatedMessages }, { merge: true });
+                                setStreamingMessage(prev => (prev ? { ...prev, text: prev.text + delta } : null));
                             }
                         } catch { }
                     }
                 }
             }
-            
-            const finalAIMessage: Message = { id: aiMessageId, text: fullResponse, sender: "ai" };
-            const finalMessages = Array.from(new Map([...existingMessages, userMessage, finalAIMessage].map(m => [m.id, m])).values());
-            await setDoc(chatRef, { messages: finalMessages, timestamp: Date.now() }, { merge: true });
-    
+        // MODIFICATION: Replaced 'error: any' with a proper type assertion to fix the build error
         } catch (error) {
-            console.error("API call failed:", error);
-            const errorMessageText = error instanceof Error ? error.message : "An unknown error occurred";
-            const errorMessage: Message = { id: (Date.now() + 2).toString(), text: `Error: ${errorMessageText}`, sender: "ai" };
-            if (tempChatId) {
-                const chatRef = doc(db, "users", user.uid, "chats", tempChatId);
-                const updatedMessages = Array.from(new Map([...messages, errorMessage].map(m => [m.id, m])).values());
-                await setDoc(chatRef, { messages: updatedMessages }, { merge: true });
+            const err = error as Error;
+            if (err.name === "AbortError") {
+                console.log("Fetch aborted by user.");
+            } else {
+                console.error("API call failed:", err);
+                const errorMessageText = err.message || "An unknown error occurred";
+                setStreamingMessage({ id: (Date.now() + 2).toString(), text: `Error: ${errorMessageText}`, sender: "ai" });
             }
         } finally {
             setIsLoading(false);
+            abortControllerRef.current = null;
         }
       };
-    
-    const uniqueMessages = Array.from(new Map(messages.map((m) => [m.id, m])).values());
+      
+    const finalStreamingMessage = useRef<Message | null>(null);
+    useEffect(() => {
+        if (streamingMessage) {
+            finalStreamingMessage.current = streamingMessage;
+        }
+    }, [streamingMessage]);
+
+    useEffect(() => {
+        if (!isLoading && finalStreamingMessage.current) {
+            const finalMessage = finalStreamingMessage.current;
+            if (currentChatId && finalMessage.text.trim()) {
+                const chatRef = doc(db, "users", user.uid, "chats", currentChatId);
+                const finalMessages = [...messages, finalMessage];
+                setDoc(chatRef, { messages: finalMessages }, { merge: true });
+                setMessages(finalMessages);
+            }
+            setStreamingMessage(null);
+            finalStreamingMessage.current = null;
+        }
+    }, [isLoading, currentChatId, user.uid, db, messages]);
+
 
     return (
-            <div className="flex h-full bg-[#131314] text-white">
-            {/* MODIFICATION: Pass the 'auth' prop to the desktop sidebar */}
+        <div className="flex h-full bg-[#131314] text-white">
             <GeminiDesktopSidebar 
                 onNewChat={handleNewChat} 
                 toggleMobileSidebar={() => setIsSlideoutOpen(true)} 
@@ -203,6 +235,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                 currentChatId={currentChatId}
                 onSelectChat={handleSelectChat}
                 onDeleteChat={handleDeleteChat}
+                onRenameChat={handleRenameChat}
             />
 
             <main className="flex-grow flex flex-col relative overflow-hidden">
@@ -210,25 +243,18 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                     <button onClick={() => setIsSlideoutOpen(true)} className="p-2 rounded-full hover:bg-gray-800">
                         <MenuIcon className="w-6 h-6" />
                     </button>
-                    
                     <h1 className="font-medium">AuraIQ</h1>
-
                     <div className="flex items-center gap-2">
-                        <button onClick={() => setIsContextPanelOpen(true)} className="p-2 rounded-full hover:bg-gray-800 relative">
-                            {/* MODIFICATION: New composite icon using Lucide */}
-                    
-                            <BrainCircuit className="w-7 h-7 text-gray-400 animate-pulse " />
+                        <button onClick={() => setIsContextPanelOpen(true)} className="p-2 rounded-full hover:bg-gray-800">
+                            <BrainCircuit className="w-6 h-6 text-gray-400 animate-pulse" />
                         </button>
                         <div className="relative">
                             <button onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center">
                                 <UserIcon className="w-6 h-6" />
                             </button>
                             {isProfileMenuOpen && (
-                                <div className="absolute right-0 mt-2 w-48 bg-[#1e1f20] rounded-md shadow-lg z-20">
-                                    <button
-                                        onClick={() => signOut(auth)}
-                                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
-                                    >
+                                <div className="absolute right-0 mt-2 w-48 bg-[#1e20] rounded-md shadow-lg z-20">
+                                    <button onClick={() => signOut(auth)} className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
                                         <LogoutIcon className="w-5 h-5"/>
                                         <span>Logout</span>
                                     </button>
@@ -241,12 +267,15 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                 <div className="flex-grow overflow-y-auto p-4">
                     <div className="w-full max-w-3xl mx-auto h-full flex flex-col">
                         <div className="flex-grow">
-                             {(!currentChatId && uniqueMessages.length === 0) ? (
+                             {(!currentChatId && messages.length === 0 && !streamingMessage) ? (
                                 <WelcomeScreen userName={user.email} />
                             ) : (
-                                uniqueMessages.map(msg => <ChatBubble key={msg.id} message={msg} />)
+                                <>
+                                    {messages.map(msg => <ChatBubble key={msg.id} message={msg} />)}
+                                    {streamingMessage && <ChatBubble message={streamingMessage} />}
+                                </>
                             )}
-                            <div ref={chatEndRef} />
+                             <div ref={chatEndRef} />
                         </div>
                     </div>
                 </div>
@@ -256,6 +285,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                     setInput={setInput}
                     isLoading={isLoading}
                     handleSendMessage={handleSendMessage}
+                    handleStopGenerating={handleStopGenerating}
                     toggleContextActive={() => setIsContextActive(!isContextActive)}
                     isContextActive={isContextActive}
                 />
