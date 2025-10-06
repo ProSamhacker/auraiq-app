@@ -188,10 +188,12 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const uniqueMessages = Array.from(new Map(messages.map((m) => [m.id, m])).values());
 
     return (
-        <div className="flex h-full bg-[#131314] text-white">
+            <div className="flex h-full bg-[#131314] text-white">
+            {/* MODIFICATION: Pass the 'auth' prop to the desktop sidebar */}
             <GeminiDesktopSidebar 
                 onNewChat={handleNewChat} 
                 toggleMobileSidebar={() => setIsSlideoutOpen(true)} 
+                auth={auth}
             />
             <GeminiSidebar 
                 isOpen={isSlideoutOpen} 
