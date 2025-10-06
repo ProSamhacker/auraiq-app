@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, FC, FormEvent, useEffect, useRef } from 'react';
-import { User, Auth } from 'firebase/auth';
+import { User, Auth, signOut } from 'firebase/auth';
 import { Firestore, collection, query, orderBy, onSnapshot, doc, addDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { Chat, Message } from '../lib/types';
 import GeminiDesktopSidebar from './GeminiDesktopSidebar'; 
@@ -11,7 +11,11 @@ import GeminiSidebar from './GeminiSidebar';
 import ChatInput from './ChatInput';
 import ContextPanel from './ContextPanel';
 import ChatBubble from './ChatBubble';
-import { MenuIcon, UserIcon } from './Icons';
+
+// MODIFICATION: Import Brain and Pencil from the new library
+import { Brain, BrainCircuit } from 'lucide-react'; 
+// MODIFICATION: No longer need BrainPencilIcon from the local file
+import { MenuIcon, UserIcon, LogoutIcon } from './Icons';
 
 interface GeminiLayoutProps {
   user: User;
@@ -25,13 +29,14 @@ const WelcomeScreen: FC<{ userName: string | null }> = ({ userName }) => (
             Hello, {userName || 'User'}
         </h1>
         <p className="text-gray-400 text-lg mb-8">How can I help you today?</p>
-        {/* MODIFICATION: The div containing the suggestion buttons has been removed from here. */}
     </div>
 );
 
 const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
-    const [isSlideoutOpen, setIsSlideoutOpen] = useState(false);
+    const [isContextActive, setIsContextActive] = useState(false);
     const [isContextPanelOpen, setIsContextPanelOpen] = useState(false);
+    const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+    const [isSlideoutOpen, setIsSlideoutOpen] = useState(false);
     const [chats, setChats] = useState<Chat[]>([]);
     const [currentChatId, setCurrentChatId] = useState<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -41,6 +46,13 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const chatEndRef = useRef<HTMLDivElement>(null);
     const isInitialLoad = useRef(true);
 
+    // All handler functions and useEffects remain the same...
+    useEffect(() => {
+        setTimeout(() => {
+            chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }, 100);
+    }, [messages]);
+    
     useEffect(() => {
         if (!user) return;
         const q = query(collection(db, "users", user.uid, "chats"), orderBy("timestamp", "desc"));
@@ -72,10 +84,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         return () => unsubscribe();
       }, [currentChatId, user, db]);
     
-      useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, [messages]);
-    
       const handleNewChat = () => {
         setCurrentChatId(null);
         setIsSlideoutOpen(false);
@@ -94,7 +102,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       const handleSendMessage = async (e: FormEvent) => {
         e.preventDefault();
         if (!input.trim() || isLoading) return;
-        const userMessage: Message = { id: crypto.randomUUID(), text: input, sender: "user" };
+        const userMessage: Message = { id: Date.now().toString(), text: input, sender: "user" };
         const tempInput = input;
         setInput("");
         setIsLoading(true);
@@ -119,7 +127,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                 await setDoc(chatRef, { messages: [...existingMessages, userMessage] }, { merge: true });
             }
     
-            const contextToSend = isContextPanelOpen ? context : "";
+            const contextToSend = isContextActive ? context : "";
 
             const response = await fetch("/api/chat", {
                 method: "POST",
@@ -134,7 +142,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let fullResponse = "";
-            const aiMessageId = crypto.randomUUID();
+            const aiMessageId = (Date.now() + 1).toString();
     
             while (true) {
                 const { value, done } = await reader.read();
@@ -166,7 +174,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         } catch (error) {
             console.error("API call failed:", error);
             const errorMessageText = error instanceof Error ? error.message : "An unknown error occurred";
-            const errorMessage: Message = { id: crypto.randomUUID(), text: `Error: ${errorMessageText}`, sender: "ai" };
+            const errorMessage: Message = { id: (Date.now() + 2).toString(), text: `Error: ${errorMessageText}`, sender: "ai" };
             if (tempChatId) {
                 const chatRef = doc(db, "users", user.uid, "chats", tempChatId);
                 const updatedMessages = Array.from(new Map([...messages, errorMessage].map(m => [m.id, m])).values());
@@ -195,14 +203,36 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                 onDeleteChat={handleDeleteChat}
             />
 
-            <main className="flex-grow flex flex-col relative">
-                <header className="flex items-center justify-between p-4 md:hidden">
+            <main className="flex-grow flex flex-col relative overflow-hidden">
+                <header className="flex items-center justify-between p-4 flex-shrink-0 md:hidden z-10 bg-[#131314] border-b border-gray-800">
                     <button onClick={() => setIsSlideoutOpen(true)} className="p-2 rounded-full hover:bg-gray-800">
                         <MenuIcon className="w-6 h-6" />
                     </button>
+                    
                     <h1 className="font-medium">AuraIQ</h1>
-                    <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center">
-                        <UserIcon className="w-6 h-6" />
+
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setIsContextPanelOpen(true)} className="p-2 rounded-full hover:bg-gray-800 relative">
+                            {/* MODIFICATION: New composite icon using Lucide */}
+                    
+                            <BrainCircuit className="w-7 h-7 text-gray-400 animate-pulse " />
+                        </button>
+                        <div className="relative">
+                            <button onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center">
+                                <UserIcon className="w-6 h-6" />
+                            </button>
+                            {isProfileMenuOpen && (
+                                <div className="absolute right-0 mt-2 w-48 bg-[#1e1f20] rounded-md shadow-lg z-20">
+                                    <button
+                                        onClick={() => signOut(auth)}
+                                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
+                                    >
+                                        <LogoutIcon className="w-5 h-5"/>
+                                        <span>Logout</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </header>
                 
@@ -224,8 +254,8 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                     setInput={setInput}
                     isLoading={isLoading}
                     handleSendMessage={handleSendMessage}
-                    toggleContextPanel={() => setIsContextPanelOpen(!isContextPanelOpen)}
-                    isContextPanelOpen={isContextPanelOpen}
+                    toggleContextActive={() => setIsContextActive(!isContextActive)}
+                    isContextActive={isContextActive}
                 />
             </main>
             
