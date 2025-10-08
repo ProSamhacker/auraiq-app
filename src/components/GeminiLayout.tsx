@@ -221,7 +221,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
 
 
     return (
-        <div className="flex h-screen bg-[#131314] text-white">
+        <div className="flex h-full bg-[#131314] text-white">
             <GeminiDesktopSidebar 
                 onNewChat={handleNewChat} 
                 toggleMobileSidebar={() => setIsSlideoutOpen(true)} 
