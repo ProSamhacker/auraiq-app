@@ -22,7 +22,7 @@ html {
 @media (min-width: 768px) {
   /* Larger font size for tablets and desktops (md breakpoint) */
   html {
-    font-size: 15px;
+    font-size: 17px;
   }
 }
 

@@ -84,7 +84,7 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
       )}
       
       {/* vvvvv THIS LINE IS MODIFIED vvvvv */}
-      <div className={`relative w-fit max-w-[90%] md:max-w-xl lg:max-w-2xl p-3 rounded-2xl ${isUser ? "bg-blue-600 text-white rounded-br-none" : "bg-gray-800 text-gray-300 rounded-bl-none"}`}>
+      <div className={`relative w-fit max-w-[90%] md:max-w-xl lg:max-w-3xl p-3 rounded-2xl ${isUser ? "bg-blue-600 text-white rounded-br-none" : "bg-gray-800 text-gray-300 rounded-bl-none"}`}>
         <div className="prose prose-invert prose-p:my-2 text-sm leading-relaxed">
           {promptText && <ReactMarkdown components={customComponents}>{promptText}</ReactMarkdown>}
         </div>
