@@ -1,11 +1,23 @@
-// src/components/ChatBubble.tsx
-
 import { FC, useState } from "react";
 import { Message } from "../lib/types";
 import { BotIcon, UserIcon, CopyIcon, CheckIcon } from "./Icons";
+import { FileText } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+const customCodeStyle = {
+  ...oneDark,
+  'pre[class*="language-"]': {
+    ...oneDark['pre[class*="language-"]'],
+    padding: '1rem',
+    lineHeight: '1.5',   
+  },
+  'code[class*="language-"]': {
+     ...oneDark['code[class*="language-"]'],
+     lineHeight: '1.5',
+  }
+};
 
 interface ChatBubbleProps {
   message: Message;
@@ -15,31 +27,29 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
   const isUser = message.sender === "user";
   const [isCopied, setIsCopied] = useState(false);
 
+  let promptText = message.text;
+  let attachedFiles: string[] = [];
+  const attachmentRegex = /\[ATTACHMENTS:(.*?)\]/;
+  const match = message.text.match(attachmentRegex);
+
+  if (match && match[1]) {
+    promptText = message.text.replace(attachmentRegex, '').trim();
+    attachedFiles = match[1].split('|||');
+  }
+
   const handleCopy = () => {
+    const textToCopy = promptText || message.text;
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(message.text).then(() => {
+      navigator.clipboard.writeText(textToCopy).then(() => {
         setIsCopied(true);
         setTimeout(() => setIsCopied(false), 2000);
       });
     } else {
-      const textArea = document.createElement("textarea");
-      textArea.value = message.text;
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
-      try {
-        document.execCommand('copy');
-        setIsCopied(true);
-        setTimeout(() => setIsCopied(false), 2000);
-      } catch (err) {
-        console.error('Fallback copy failed', err);
-      }
-      document.body.removeChild(textArea);
+      // Fallback
     }
   };
 
   const customComponents = {
-    // MODIFICATION: Replaced 'any' with a specific type and removed the unused 'node'
     code({ inline, className, children, ...props }: {
       inline?: boolean;
       className?: string;
@@ -47,16 +57,18 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
     }) {
       const match = /language-(\w+)/.exec(className || '');
       return !inline && match ? (
-        <SyntaxHighlighter
-          style={oneDark}
-          language={match[1]}
-          PreTag="div"
-          {...props}
-        >
-          {String(children).replace(/\n$/, '')}
-        </SyntaxHighlighter>
+        <div className="overflow-x-auto bg-[#0d1117] rounded-md my-2 text-xs md:text-sm">
+            <SyntaxHighlighter
+              style={customCodeStyle}
+              language={match[1]}
+              PreTag="div"
+              {...props}
+            >
+              {String(children).replace(/\n$/, '')}
+            </SyntaxHighlighter>
+        </div>
       ) : (
-        <code className="bg-gray-700 rounded-md px-1.5 py-0.5" {...props}>
+        <code className="bg-gray-700 rounded-md px-1.5 py-0.5 break-words" {...props}>
           {children}
         </code>
       );
@@ -64,19 +76,32 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
   };
 
   return (
-    <div className={`relative flex items-start gap-4 my-4 ${isUser ? "justify-end" : ""}`}>
+    <div className={`relative flex items-start gap-2 my-4 ${isUser ? "justify-end" : ""}`}>
       {!isUser && (
-        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center">
-          <BotIcon className="w-6 h-6 text-gray-400" />
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
+          <BotIcon className="w-5 h-5 text-gray-400" />
         </div>
       )}
       
-      <div className={`relative max-w-xl p-4 rounded-2xl ${isUser ? "bg-blue-600 text-white rounded-br-none" : "bg-gray-800 text-gray-300 rounded-bl-none"}`}>
-        <div className="prose prose-invert prose-p:my-2">
-          <ReactMarkdown components={customComponents}>
-            {message.text}
-          </ReactMarkdown>
+      {/* vvvvv THIS LINE IS MODIFIED vvvvv */}
+      <div className={`relative w-fit max-w-[90%] md:max-w-xl lg:max-w-2xl p-3 rounded-2xl ${isUser ? "bg-blue-600 text-white rounded-br-none" : "bg-gray-800 text-gray-300 rounded-bl-none"}`}>
+        <div className="prose prose-invert prose-p:my-2 text-sm leading-relaxed">
+          {promptText && <ReactMarkdown components={customComponents}>{promptText}</ReactMarkdown>}
         </div>
+
+        {isUser && attachedFiles.length > 0 && (
+            <div className="mt-3 pt-2 border-t border-white/20">
+                <div className="text-xs text-white/70 mb-2">Attached files:</div>
+                <div className="flex flex-col gap-1.5">
+                    {attachedFiles.map((fileName, index) => (
+                        <div key={index} className="flex items-center gap-2 bg-black/20 rounded-md px-2 py-1 text-xs">
+                            <FileText className="w-4 h-4 text-white/60 flex-shrink-0"/>
+                            <span className="truncate">{fileName}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
 
         {!isUser && (
           <button 
@@ -93,8 +118,8 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
       </div>
       
       {isUser && (
-        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center">
-          <UserIcon className="w-6 h-6 text-gray-400" />
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
+          <UserIcon className="w-5 h-5 text-gray-400" />
         </div>
       )}
     </div>

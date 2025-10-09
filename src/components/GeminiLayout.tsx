@@ -4,14 +4,14 @@
 
 import { useState, FC, FormEvent, useEffect, useRef } from 'react';
 import { User, Auth, signOut } from 'firebase/auth';
-import { Firestore, collection, query, orderBy, onSnapshot, doc, addDoc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { Firestore, collection, query, orderBy, onSnapshot, getDoc, doc, addDoc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { Chat, Message } from '../lib/types';
-import GeminiDesktopSidebar from './GeminiDesktopSidebar'; 
+import GeminiDesktopSidebar from './GeminiDesktopSidebar';
 import GeminiSidebar from './GeminiSidebar';
 import ChatInput from './ChatInput';
-import ContextPanel from './ContextPanel';
+import ContextPanel, { ContextFile } from './ContextPanel';
 import ChatBubble from './ChatBubble';
-import { BrainCircuit } from 'lucide-react'; 
+import { BrainCircuit } from 'lucide-react';
 import { MenuIcon, UserIcon, LogoutIcon } from './Icons';
 
 interface GeminiLayoutProps {
@@ -42,15 +42,18 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [context, setContext] = useState("");
-    const chatEndRef = useRef<HTMLDivElement>(null);
+    const [attachments, setAttachments] = useState<File[]>([]);
+    const [contextFiles, setContextFiles] = useState<ContextFile[]>([]);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
     const isInitialLoad = useRef(true);
 
     useEffect(() => {
-        setTimeout(() => {
-            chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-        }, 100);
+        if (scrollContainerRef.current) {
+            const { scrollHeight } = scrollContainerRef.current;
+            scrollContainerRef.current.scrollTop = scrollHeight;
+        }
     }, [messages, streamingMessage]);
-    
+
     useEffect(() => {
         if (!user) return;
         const q = query(collection(db, "users", user.uid, "chats"), orderBy("timestamp", "desc"));
@@ -69,8 +72,22 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         });
         return () => unsubscribe();
       }, [user, db, currentChatId]);
-    
-      useEffect(() => {
+
+    useEffect(() => {
+        if (!user) return;
+        const q = query(collection(db, "users", user.uid, "contextFiles"), orderBy("name", "asc"));
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const files: ContextFile[] = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                name: doc.data().name,
+                url: doc.data().url,
+            }));
+            setContextFiles(files);
+        });
+        return () => unsubscribe();
+    }, [user, db]);
+
+    useEffect(() => {
         if (!currentChatId) {
           setMessages([]);
           return;
@@ -81,75 +98,153 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         });
         return () => unsubscribe();
       }, [currentChatId, user, db]);
-    
-      const handleNewChat = () => {
+
+    const handleNewChat = () => {
         setCurrentChatId(null);
         setIsSlideoutOpen(false);
-      }
-      const handleSelectChat = (id: string) => {
+    }
+    const handleSelectChat = (id: string) => {
         setCurrentChatId(id);
         setIsSlideoutOpen(false);
-      }
-      const handleDeleteChat = async (chatId: string) => {
-        await deleteDoc(doc(db, "users", user.uid, "chats", chatId));
-        if (currentChatId === chatId) {
-            setCurrentChatId(null);
+    }
+    
+    const handleDeleteChat = async (chatId: string) => {
+        if (!chatId) return;
+        try {
+            const chatDocRef = doc(db, "users", user.uid, "chats", chatId);
+            const chatDoc = await getDoc(chatDocRef);
+            if (chatDoc.exists()) {
+                const messages: Message[] = chatDoc.data().messages || [];
+                const urlsToDelete: string[] = [];
+                const urlRegex = /https:\/\/[\w.-]+\.public\.blob\.vercel-storage\.com\/[^\])]+/g;
+                messages.forEach(message => {
+                    const matches = message.text.match(urlRegex);
+                    if (matches) {
+                        urlsToDelete.push(...matches);
+                    }
+                });
+                if (urlsToDelete.length > 0) {
+                    await fetch('/api/delete-files', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ urls: urlsToDelete }),
+                    });
+                }
+            }
+            await deleteDoc(chatDocRef);
+            if (currentChatId === chatId) {
+                setCurrentChatId(null);
+            }
+        } catch (error) {
+            console.error("Error deleting chat:", error);
         }
-      };
+    };
 
-      const handleRenameChat = async (chatId: string, newTitle: string) => {
+    const handleRenameChat = async (chatId: string, newTitle: string) => {
         if (!chatId || !newTitle.trim()) return;
         const chatRef = doc(db, "users", user.uid, "chats", chatId);
         await updateDoc(chatRef, { title: newTitle.trim() });
-      };
+    };
 
-      const handleStopGenerating = () => {
+    const handleStopGenerating = () => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
             setIsLoading(false);
         }
-      };
+    };
 
-      const handleSendMessage = async (e: FormEvent) => {
+    const handleFileUpload = async (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const response = await fetch('/api/context/upload', {
+                method: 'POST',
+                body: formData,
+                headers: { Authorization: `Bearer ${await user.getIdToken()}` }
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'File upload failed');
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert((error as Error).message);
+        }
+    };
+    
+    const handleFileDelete = async (fileId: string) => {
+        try {
+            const response = await fetch('/api/context/delete', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${await user.getIdToken()}` 
+                },
+                body: JSON.stringify({ fileId }),
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'File deletion failed');
+            }
+        } catch (error) {
+            console.error('Delete error:', error);
+            alert((error as Error).message);
+        }
+    };
+
+    const handleSendMessage = async (e: FormEvent, taskType: 'auto' | 'daily' | 'coding') => {
         e.preventDefault();
-        if (!input.trim() || isLoading) return;
+        if ((!input.trim() && attachments.length === 0) || isLoading) return;
 
         const abortController = new AbortController();
         abortControllerRef.current = abortController;
+        
+        const userMessageText = attachments.length > 0 
+            ? `${input}\n[ATTACHMENTS:${attachments.map(f => f.name).join('|||')}]` 
+            : input;
 
-        const userMessage: Message = { id: Date.now().toString(), text: input, sender: "user" };
+        const userMessage: Message = { id: Date.now().toString(), text: userMessageText, sender: "user" };
         const tempInput = input;
+        const tempAttachments = attachments;
         const newMessages = [...messages, userMessage];
+
         setMessages(newMessages);
         setInput("");
+        setAttachments([]);
         setIsLoading(true);
         let tempChatId = currentChatId;
 
         try {
-            let chatRef;
+            const formData = new FormData();
+            formData.append("input", tempInput);
+            formData.append("taskType", taskType);
+            formData.append("context", isContextActive ? context : "");
+            formData.append("history", JSON.stringify(messages)); 
+
+            if (isContextActive && contextFiles.length > 0) {
+                const contextFileUrls = contextFiles.map(f => f.url);
+                formData.append("contextFileUrls", JSON.stringify(contextFileUrls));
+            }
+
+            tempAttachments.forEach(file => {
+              formData.append("files", file);
+            });
+
             if (!tempChatId) {
                 const newChatRef = await addDoc(collection(db, "users", user.uid, "chats"), {
                     title: tempInput.substring(0, 30) + (tempInput.length > 30 ? "..." : ""),
                     messages: [userMessage],
                     timestamp: Date.now(),
                 });
-                chatRef = newChatRef;
                 tempChatId = newChatRef.id;
                 setCurrentChatId(newChatRef.id);
             } else {
-                chatRef = doc(db, "users", user.uid, "chats", tempChatId);
-                await setDoc(chatRef, { messages: newMessages }, { merge: true });
+                await setDoc(doc(db, "users", user.uid, "chats", tempChatId), { messages: newMessages }, { merge: true });
             }
 
-            const contextToSend = isContextActive ? context : "";
             const response = await fetch("/api/chat", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    input: tempInput,
-                    context: contextToSend,
-                    history: messages
-                }),
+                body: formData,
                 signal: abortController.signal,
             });
 
@@ -182,7 +277,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                     }
                 }
             }
-        // MODIFICATION: Replaced 'error: any' with a proper type assertion to fix the build error
         } catch (error) {
             const err = error as Error;
             if (err.name === "AbortError") {
@@ -197,7 +291,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
             abortControllerRef.current = null;
         }
       };
-      
+
     const finalStreamingMessage = useRef<Message | null>(null);
     useEffect(() => {
         if (streamingMessage) {
@@ -222,14 +316,14 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
 
     return (
         <div className="flex h-full bg-[#131314] text-white">
-            <GeminiDesktopSidebar 
-                onNewChat={handleNewChat} 
-                toggleMobileSidebar={() => setIsSlideoutOpen(true)} 
+            <GeminiDesktopSidebar
+                onNewChat={handleNewChat}
+                toggleMobileSidebar={() => setIsSlideoutOpen(true)}
                 auth={auth}
             />
-            <GeminiSidebar 
-                isOpen={isSlideoutOpen} 
-                onClose={() => setIsSlideoutOpen(false)} 
+            <GeminiSidebar
+                isOpen={isSlideoutOpen}
+                onClose={() => setIsSlideoutOpen(false)}
                 onNewChat={handleNewChat}
                 chats={chats}
                 currentChatId={currentChatId}
@@ -263,39 +357,45 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                         </div>
                     </div>
                 </header>
-                
-                <div className="flex-grow overflow-y-auto p-4">
-                    <div className="w-full max-w-3xl mx-auto h-full flex flex-col">
-                        <div className="flex-grow">
-                             {(!currentChatId && messages.length === 0 && !streamingMessage) ? (
-                                <WelcomeScreen userName={user.email} />
-                            ) : (
-                                <>
-                                    {messages.map(msg => <ChatBubble key={msg.id} message={msg} />)}
-                                    {streamingMessage && <ChatBubble message={streamingMessage} />}
-                                </>
-                            )}
-                             <div ref={chatEndRef} />
-                        </div>
+
+                <div ref={scrollContainerRef} className="flex-grow overflow-y-auto p-4">
+                   {/* vvvvvvvvvv THIS IS THE MODIFIED LINE vvvvvvvvvv */}
+                   <div className="w-full max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto">
+                         {(!currentChatId && messages.length === 0 && !streamingMessage) ? (
+                            <WelcomeScreen userName={user.email} />
+                        ) : (
+                            <>
+                                {messages.map(msg => <ChatBubble key={msg.id} message={msg} />)}
+                                {streamingMessage && <ChatBubble message={streamingMessage} />}
+                            </>
+                        )}
                     </div>
                 </div>
-
-                <ChatInput
-                    input={input}
-                    setInput={setInput}
-                    isLoading={isLoading}
-                    handleSendMessage={handleSendMessage}
-                    handleStopGenerating={handleStopGenerating}
-                    toggleContextActive={() => setIsContextActive(!isContextActive)}
-                    isContextActive={isContextActive}
-                />
+                
+                {/* We wrap ChatInput to control its width from here, ensuring alignment */}
+                <div className="w-full max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto">
+                    <ChatInput
+                        input={input}
+                        setInput={setInput}
+                        isLoading={isLoading}
+                        handleSendMessage={handleSendMessage}
+                        handleStopGenerating={handleStopGenerating}
+                        toggleContextActive={() => setIsContextActive(!isContextActive)}
+                        isContextActive={isContextActive}
+                        attachments={attachments}
+                        setAttachments={setAttachments}
+                    />
+                </div>
             </main>
-            
-            <ContextPanel 
-                context={context} 
+
+            <ContextPanel
+                context={context}
                 setContext={setContext}
                 isOpen={isContextPanelOpen}
                 onClose={() => setIsContextPanelOpen(false)}
+                contextFiles={contextFiles}
+                onFileUpload={handleFileUpload}
+                onFileDelete={handleFileDelete}
             />
         </div>
     );

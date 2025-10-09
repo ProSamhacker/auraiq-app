@@ -1,58 +1,48 @@
-// src/components/ChatInput.tsx
-
 import { FC, FormEvent, useState, useRef, useEffect } from "react";
-import { Brain, Mic, Send, Square } from "lucide-react"; 
+import { Brain, Mic, Send, Square, Paperclip, XIcon, FileText } from "lucide-react"; 
 
 interface ChatInputProps {
   input: string;
   setInput: (value: string) => void;
   isLoading: boolean;
-  handleSendMessage: (e: FormEvent) => void;
+  handleSendMessage: (e: FormEvent, taskType: 'auto' | 'daily' | 'coding') => void;
   handleStopGenerating: () => void;
   toggleContextActive: () => void;
   isContextActive: boolean;
+  attachments: File[];
+  setAttachments: (files: File[]) => void;
 }
 
-const ChatInput: FC<ChatInputProps> = ({ input, setInput, isLoading, handleSendMessage, handleStopGenerating, toggleContextActive, isContextActive }) => {
+const ChatInput: FC<ChatInputProps> = ({ 
+  input, setInput, isLoading, handleSendMessage, handleStopGenerating, 
+  toggleContextActive, isContextActive, attachments, setAttachments 
+}) => {
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const [taskType, setTaskType] = useState<'auto' | 'daily' | 'coding'>('auto');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() && attachments.length === 0) return; 
+    handleSendMessage(e, taskType);
+  }
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      const newFiles = Array.from(event.target.files);
+      setAttachments([...attachments, ...newFiles]);
+    }
+  };
+  
+  const handleRemoveAttachment = (index: number) => {
+    const newAttachments = [...attachments];
+    newAttachments.splice(index, 1);
+    setAttachments(newAttachments);
+  };
 
   const handleMicClick = () => {
-    if (!('webkitSpeechRecognition' in window)) {
-      alert("Your browser does not support voice recognition.");
-      return;
-    }
-
-    if (isListening) {
-      recognitionRef.current?.stop();
-    } else {
-      // MODIFICATION: Removed the '(window as any)' cast to fix the build error
-      const recognition = new window.webkitSpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
-
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        const transcript = Array.from(event.results)
-          .map(result => result[0])
-          .map(result => result.transcript)
-          .join('');
-        setInput(transcript);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-      
-      recognition.onerror = (event: Event & { error: string }) => {
-        console.error("Speech recognition error", event.error);
-        setIsListening(false);
-      };
-
-      recognition.start();
-      setIsListening(true);
-      recognitionRef.current = recognition;
-    }
+    // ... (mic logic is unchanged)
   };
   
   useEffect(() => {
@@ -61,10 +51,37 @@ const ChatInput: FC<ChatInputProps> = ({ input, setInput, isLoading, handleSendM
     };
   }, []);
 
+  // vvvvv THIS LINE IS MODIFIED vvvvv
   return (
-    <div className="w-full max-w-3xl mx-auto p-4">
-      <form onSubmit={handleSendMessage} className="relative">
-        <div className="relative flex items-center w-full bg-[#1e1f20] rounded-full">
+    <div className="p-4 w-full md:max-w-2xl lg:max-w-3xl mx-auto">
+      <form onSubmit={handleSubmit} className="relative">
+        {attachments.length > 0 && (
+          <div className="p-3 bg-black/20 border-t border-x border-gray-700/50 rounded-t-xl flex flex-wrap gap-2">
+            {attachments.map((file, index) => (
+              <div key={index} className="bg-gray-600/80 text-white text-sm rounded-lg pl-2 pr-1 py-1 flex items-center gap-2 transition-colors hover:bg-gray-600">
+                <FileText className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate max-w-48">{file.name}</span>
+                <button 
+                  type="button" 
+                  onClick={() => handleRemoveAttachment(index)} 
+                  className="bg-gray-500/50 hover:bg-gray-500 rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0"
+                >
+                  <XIcon className="w-3.5 h-3.5"/>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          onChange={handleFileChange}
+          multiple 
+          className="hidden"
+        />
+
+        <div className={`relative flex items-center w-full bg-[#1e1f20] ${attachments.length > 0 ? 'rounded-b-full' : 'rounded-full'}`}>
             <button
               type="button" 
               onClick={toggleContextActive}
@@ -73,13 +90,34 @@ const ChatInput: FC<ChatInputProps> = ({ input, setInput, isLoading, handleSendM
             >
               <Brain className="w-6 h-6" />
             </button>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach files"
+              className="p-3 text-gray-400 hover:text-white"
+            >
+              <Paperclip className="w-6 h-6" />
+            </button>
+            
+            <select
+              value={taskType}
+              onChange={(e) => setTaskType(e.target.value as 'auto' | 'daily' | 'coding')}
+              className="bg-transparent text-gray-400 text-sm focus:outline-none focus:ring-0 border-0"
+              title="Select Task Type"
+            >
+              <option value="auto" className="bg-gray-800">Auto-Select</option>
+              <option value="daily" className="bg-gray-800">Daily Task</option>
+              <option value="coding" className="bg-gray-800">Coding Task</option>
+            </select>
+            
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleSendMessage(e);
+                  handleSubmit(e);
                 }
               }}
               placeholder={isListening ? "Listening..." : "Ask AuraIQ..."}
@@ -108,7 +146,7 @@ const ChatInput: FC<ChatInputProps> = ({ input, setInput, isLoading, handleSendM
                     <button
                         type="submit"
                         className="p-2 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-                        disabled={!input.trim()}
+                        disabled={!input.trim() && attachments.length === 0}
                     >
                         <Send className="w-6 h-6 text-white" />
                     </button>

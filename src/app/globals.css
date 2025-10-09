@@ -1,17 +1,44 @@
 @import "tailwindcss";
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+
+/* MODIFICATION: This block scales the entire UI down */
+html {
+  /* Base font size for mobile (zoomed out) */
+  font-size: 14px; 
+  @media (max-width: 767px) {
+  /*
+    This block applies a "zoom out" effect for mobile screens only.
+    It scales the entire application down to 90% of its size.
+  */
+  body > div:first-child {
+    transform: scale(0.9);
+    transform-origin: top left;
+    width: 100.11%;
+    height: 111.11%;
+    overflow-x: hidden;
+  }
+}
+}
+
+@media (min-width: 768px) {
+  /* Larger font size for tablets and desktops (md breakpoint) */
+  html {
+    font-size: 15px;
+  }
+}
 
 html,
-body,
+body {
+  height: 100%;
+  overflow: hidden; 
+  touch-action: none;
+}
+
+/* This targets the main Next.js wrapper */
 body > div:first-child,
 div#__next,
 div#__next > div {
   height: 100%;
-  overflow: hidden;
 }
-
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -36,8 +63,7 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
-/* Add this to the bottom of src/app/globals.css */
-
+/* ... (keep your keyframes animation) ... */
 @keyframes breathing-glow {
   0% {
     transform: scale(1);
