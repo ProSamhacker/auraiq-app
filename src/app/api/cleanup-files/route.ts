@@ -570,7 +570,7 @@ export async function POST(req: NextRequest) {
           } finally {
             try {
               reader.releaseLock();
-            } catch (_e) {
+            } catch {
               // Ignore if already released
             }
           }

@@ -4,8 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { put } from '@vercel/blob';
 import { randomUUID } from "crypto";
 import { extractText } from 'unpdf';
-// @ts-ignore
-import mammoth = require('mammoth');
+import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import AdmZip from 'adm-zip';
 import { adminAuth } from '@/lib/firebase-admin';
@@ -321,7 +320,7 @@ export async function POST(req: NextRequest) {
                   content += `Sheet: ${sheetName}\n\n`;
                   const worksheet = workbook.Sheets[sheetName];
                   
-                  const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+                  const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as (string | number | null)[][];
                   
                   if (jsonData.length > maxRowsPerSheet) {
                     const truncatedData = jsonData.slice(0, maxRowsPerSheet);
@@ -436,7 +435,7 @@ export async function POST(req: NextRequest) {
             workbook.SheetNames.forEach(sheetName => {
               content += `Sheet: ${sheetName}\n\n`;
               const worksheet = workbook.Sheets[sheetName];
-              const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+              const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as (string | number | null)[][];
               
               if (jsonData.length > maxRowsPerSheet) {
                 const truncatedData = jsonData.slice(0, maxRowsPerSheet);
@@ -584,7 +583,7 @@ export async function POST(req: NextRequest) {
           } finally {
             try {
               reader.releaseLock();
-            } catch (e) {
+            } catch {
               // Ignore if already released
             }
           }
