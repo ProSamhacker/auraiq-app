@@ -6,7 +6,6 @@ import { BotIcon, UserIcon, CopyIcon, CheckIcon } from "./Icons";
 import { FileText } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-// ✅ CJS-compatible theme import for Next.js 15 (Turbopack)
 import { oneDark } from "@/styles/oneDark";
 
 interface ChatBubbleProps {
@@ -17,7 +16,7 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
   const isUser = message.sender === "user";
   const [isCopied, setIsCopied] = useState(false);
 
-  // Extract attachments from message text
+  // ✅ Extract attachments from message text
   let promptText = message.text;
   let attachedFiles: string[] = [];
   const attachmentRegex = /\[ATTACHMENTS:(.*?)\]/;
@@ -28,7 +27,7 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
     attachedFiles = match[1].split("|||");
   }
 
-  // Copy message text
+  // ✅ Copy message text
   const handleCopy = () => {
     const textToCopy = promptText || message.text;
     if (navigator.clipboard && window.isSecureContext) {
@@ -48,7 +47,7 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
     }
   };
 
-  // Custom Markdown rendering
+  // ✅ Markdown + Code renderer
   const customComponents = {
     code({
       inline,
@@ -89,12 +88,14 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
         isUser ? "justify-end" : ""
       }`}
     >
+      {/* 🤖 Bot avatar */}
       {!isUser && (
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
           <BotIcon className="w-5 h-5 text-gray-400" />
         </div>
       )}
 
+      {/* 💬 Message bubble */}
       <div
         className={`relative w-fit max-w-[90%] md:max-w-xl lg:max-w-3xl p-3 rounded-2xl ${
           isUser
@@ -110,6 +111,7 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
           )}
         </div>
 
+        {/* 📎 File attachments (for user messages) */}
         {isUser && attachedFiles.length > 0 && (
           <div className="mt-3 pt-2 border-t border-white/20">
             <div className="text-xs text-white/70 mb-2">Attached files:</div>
@@ -127,6 +129,7 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
           </div>
         )}
 
+        {/* 📋 Copy button (for bot messages) */}
         {!isUser && (
           <button
             onClick={handleCopy}
@@ -141,6 +144,7 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
         )}
       </div>
 
+      {/* 👤 User avatar */}
       {isUser && (
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
           <UserIcon className="w-5 h-5 text-gray-400" />
