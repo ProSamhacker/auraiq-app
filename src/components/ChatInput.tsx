@@ -42,7 +42,48 @@ const ChatInput: FC<ChatInputProps> = ({
   };
 
   const handleMicClick = () => {
-    // ... (mic logic is unchanged)
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('Speech recognition not supported in this browser');
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map(result => result[0])
+        .map(result => result.transcript)
+        .join('');
+      
+      setInput(transcript);
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
   };
   
   useEffect(() => {
@@ -51,7 +92,6 @@ const ChatInput: FC<ChatInputProps> = ({
     };
   }, []);
 
-  // vvvvv THIS LINE IS MODIFIED vvvvv
   return (
     <div className="p-4 w-full md:max-w-2xl lg:max-w-3xl mx-auto">
       <form onSubmit={handleSubmit} className="relative">
