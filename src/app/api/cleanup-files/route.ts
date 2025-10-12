@@ -115,8 +115,8 @@ async function extractPPTXImages(buffer: Buffer): Promise<{ imageUrls: string[],
             });
             text += '\n\n';
           }
-        } catch (e) {
-          console.error('Error extracting text from slide:', e);
+        } catch (_e) {
+          console.error('Error extracting text from slide:', _e);
         }
       }
       
@@ -130,16 +130,16 @@ async function extractPPTXImages(buffer: Buffer): Promise<{ imageUrls: string[],
           const imageFile = new File([new Uint8Array(imageBuffer)], uniqueFilename, { type: mimeType });
           const blob = await put(uniqueFilename, imageFile, { access: 'public' });
           imageUrls.push(blob.url);
-        } catch (e) {
-          console.error('Error processing PPTX image:', e);
+        } catch (_e) {
+          console.error('Error processing PPTX image:', _e);
         }
       }
     }
     
     text = text.trim();
     
-  } catch (e) {
-    console.error('Failed to extract PPTX content:', e);
+  } catch (_e) {
+    console.error('Failed to extract PPTX content:', _e);
     throw new Error('Failed to process PowerPoint file');
   }
   
@@ -169,8 +169,8 @@ async function extractDOCXImages(buffer: Buffer): Promise<{ imageUrls: string[],
         imageUrls.push(blob.url);
       }
     }
-  } catch (e) {
-    console.error('Failed to extract DOCX images:', e);
+  } catch (_e) {
+    console.error('Failed to extract DOCX images:', _e);
   }
   
   return { imageUrls, text };
@@ -183,8 +183,8 @@ async function extractPDFContent(buffer: Uint8Array): Promise<{ imageUrls: strin
   try {
     const { text: pdfText } = await extractText(buffer);
     text = Array.isArray(pdfText) ? pdfText.join('\n') : pdfText;
-  } catch (e) {
-    console.error('Failed to extract PDF content:', e);
+  } catch (_e) {
+    console.error('Failed to extract PDF content:', _e);
   }
   
   return { imageUrls, text };
@@ -339,8 +339,8 @@ export async function POST(req: NextRequest) {
                 }
               }
             }
-          } catch (e) {
-            console.error(`Failed to fetch and process context file from ${url}`, e);
+          } catch (_e) {
+            console.error(`Failed to fetch and process context file from ${url}`, _e);
             textContent += `\n\n[System note: Failed to load context from ${url}]`;
           }
         });
@@ -369,8 +369,8 @@ export async function POST(req: NextRequest) {
               hasImage = true;
               imageUrls.forEach(url => imageContent.push({ type: 'image_url', image_url: { url } }));
             }
-          } catch (e) {
-            console.error(`Failed to process PDF file ${file.name}`, e);
+          } catch (_e) {
+            console.error(`Failed to process PDF file ${file.name}`, _e);
             textContent += `\n\n[System note: Failed to read PDF file ${file.name}]`;
           }
         }
@@ -387,8 +387,8 @@ export async function POST(req: NextRequest) {
               hasImage = true;
               imageUrls.forEach(url => imageContent.push({ type: 'image_url', image_url: { url } }));
             }
-          } catch (e) {
-            console.error(`Failed to process DOCX file ${file.name}`, e);
+          } catch (_e) {
+            console.error(`Failed to process DOCX file ${file.name}`, _e);
             textContent += `\n\n[System note: Failed to read DOCX file ${file.name}]`;
           }
         }
@@ -405,8 +405,8 @@ export async function POST(req: NextRequest) {
               hasImage = true;
               imageUrls.forEach(url => imageContent.push({ type: 'image_url', image_url: { url } }));
             }
-          } catch (e) {
-            console.error(`Failed to process PPTX file ${file.name}`, e);
+          } catch (_e) {
+            console.error(`Failed to process PPTX file ${file.name}`, _e);
             textContent += `\n\n[System note: Failed to read PPTX file ${file.name}]`;
           }
         }
@@ -441,8 +441,8 @@ export async function POST(req: NextRequest) {
                 textContent += `\n[Note: File content was truncated due to size]`;
               }
             }
-          } catch (e) {
-            console.error(`Failed to process XLSX file ${file.name}`, e);
+          } catch (_e) {
+            console.error(`Failed to process XLSX file ${file.name}`, _e);
             textContent += `\n\n[System note: Failed to read Excel file ${file.name}]`;
           }
         }
@@ -570,7 +570,7 @@ export async function POST(req: NextRequest) {
           } finally {
             try {
               reader.releaseLock();
-            } catch (e) {
+            } catch (_e) {
               // Ignore if already released
             }
           }

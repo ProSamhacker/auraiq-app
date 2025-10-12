@@ -107,7 +107,7 @@ export function useStreamingChat(user: User | null, options?: StreamingChatOptio
                 fullText += delta;
                 setStreamingMessage({ id: aiMessageId, text: fullText, sender: 'ai' });
               }
-            } catch (e) {
+            } catch (_e) {
               // Ignore JSON parse errors
             }
           }

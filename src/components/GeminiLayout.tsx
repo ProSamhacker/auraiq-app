@@ -4,7 +4,7 @@
 
 import { useState, FC, FormEvent, useEffect, useRef } from 'react';
 import { User, Auth, signOut } from 'firebase/auth';
-import { Firestore, collection, addDoc, doc, setDoc, deleteDoc, updateDoc, getDocs, query } from 'firebase/firestore';
+import { Firestore, collection, addDoc, doc, deleteDoc, updateDoc, getDocs } from 'firebase/firestore';
 import { Message } from '../lib/types';
 import { addMessage, deleteAllMessages } from '../lib/messageStorage';
 import { useChats } from '../hooks/useChats';
@@ -13,7 +13,7 @@ import { useMessages } from '../hooks/useMessages';
 import GeminiDesktopSidebar from './GeminiDesktopSidebar';
 import GeminiSidebar from './GeminiSidebar';
 import ChatInput from './ChatInput';
-import ContextPanel, { ContextFile } from './ContextPanel';
+import ContextPanel from './ContextPanel';
 import ChatBubble from './ChatBubble';
 import { BrainCircuit } from 'lucide-react';
 import { MenuIcon, UserIcon, LogoutIcon } from './Icons';
@@ -35,9 +35,9 @@ const WelcomeScreen: FC<{ userName: string | null }> = ({ userName }) => (
 
 const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
   // Use custom hooks
-  const { chats, currentChatId, setCurrentChatId, createNewChat, loading: chatsLoading } = useChats(user?.uid, db);
+  const { chats, currentChatId, setCurrentChatId, createNewChat } = useChats(user?.uid, db);
   const { contextFiles } = useContextFiles(user?.uid, db);
-  const { messages, setMessages, loading: messagesLoading } = useMessages(user?.uid, currentChatId, db);
+  const { messages, setMessages } = useMessages(user?.uid, currentChatId, db);
 
   // Local state
   const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
@@ -318,7 +318,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                 fullText += delta;
                 setStreamingMessage({ id: aiMessageId, text: fullText, sender: "ai" });
               }
-            } catch (parseError) {
+            } catch (_parseError) {
               // Ignore JSON parse errors
             }
           }

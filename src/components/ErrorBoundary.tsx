@@ -86,7 +86,7 @@ class ErrorBoundary extends Component<Props, State> {
             
             <h2 className="text-2xl font-bold text-center mb-2">Something went wrong</h2>
             <p className="text-gray-400 text-center mb-6">
-              We're sorry, but something unexpected happened. Please try refreshing the page.
+              We&apos;re sorry, but something unexpected happened. Please try refreshing the page.
             </p>
 
             {process.env.NODE_ENV === 'development' && this.state.error && (
@@ -127,18 +127,3 @@ class ErrorBoundary extends Component<Props, State> {
 }
 
 export default ErrorBoundary;
-
-// Usage in your app:
-// Wrap your main component with ErrorBoundary
-/*
-// src/app/page.tsx
-import ErrorBoundary from '@/components/ErrorBoundary';
-
-export default function Home() {
-  return (
-    <ErrorBoundary>
-      <YourMainComponent />
-    </ErrorBoundary>
-  );
-}
-*/
