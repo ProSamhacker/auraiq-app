@@ -11,6 +11,8 @@
   "dependencies": {
     "@ai-sdk/openai": "^2.0.42",
     "@ducanh2912/next-pwa": "^10.2.9",
+    "@upstash/ratelimit": "^2.0.6",
+    "@upstash/redis": "^1.35.5",
     "@vercel/blob": "^2.0.0",
     "adm-zip": "^0.5.16",
     "ai": "^5.0.60",

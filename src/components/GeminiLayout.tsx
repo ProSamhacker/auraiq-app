@@ -1,4 +1,4 @@
-// src/components/GeminiLayout.tsx
+// src/components/GeminiLayout.tsx - Updated with auth token
 
 "use client";
 
@@ -46,6 +46,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const [contextFiles, setContextFiles] = useState<ContextFile[]>([]);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const isInitialLoad = useRef(true);
+    const [rateLimitInfo, setRateLimitInfo] = useState({ remaining: 20, limit: 20 });
 
     useEffect(() => {
         if (scrollContainerRef.current) {
@@ -157,10 +158,11 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         const formData = new FormData();
         formData.append('file', file);
         try {
+            const token = await user.getIdToken();
             const response = await fetch('/api/context/upload', {
                 method: 'POST',
                 body: formData,
-                headers: { Authorization: `Bearer ${await user.getIdToken()}` }
+                headers: { Authorization: `Bearer ${token}` }
             });
             if (!response.ok) {
                 const errorData = await response.json();
@@ -174,11 +176,12 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     
     const handleFileDelete = async (fileId: string) => {
         try {
+            const token = await user.getIdToken();
             const response = await fetch('/api/context/delete', {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${await user.getIdToken()}` 
+                    'Authorization': `Bearer ${token}` 
                 },
                 body: JSON.stringify({ fileId }),
             });
@@ -242,15 +245,38 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                 await setDoc(doc(db, "users", user.uid, "chats", tempChatId), { messages: newMessages }, { merge: true });
             }
 
+            // 🔐 GET AUTH TOKEN
+            const token = await user.getIdToken();
+
             const response = await fetch("/api/chat", {
                 method: "POST",
                 body: formData,
+                headers: {
+                    'Authorization': `Bearer ${token}` // 🔐 SEND TOKEN
+                },
                 signal: abortController.signal,
             });
 
-            if (!response.ok || !response.body) {
+            // 📊 EXTRACT RATE LIMIT INFO
+            const remaining = response.headers.get('X-RateLimit-Remaining');
+            const limit = response.headers.get('X-RateLimit-Limit');
+            if (remaining && limit) {
+                setRateLimitInfo({ remaining: parseInt(remaining), limit: parseInt(limit) });
+            }
+
+            if (!response.ok) {
                 const errorData = await response.json();
+                
+                // Handle rate limiting
+                if (response.status === 429) {
+                    throw new Error("Rate limit exceeded. Please wait a minute before trying again.");
+                }
+                
                 throw new Error(errorData.error || "API error");
+            }
+
+            if (!response.body) {
+                throw new Error("No response body");
             }
 
             const reader = response.body.getReader();
@@ -347,7 +373,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                                 <UserIcon className="w-6 h-6" />
                             </button>
                             {isProfileMenuOpen && (
-                                <div className="absolute right-0 mt-2 w-48 bg-[#1e20] rounded-md shadow-lg z-20">
+                                <div className="absolute right-0 mt-2 w-48 bg-[#1e1f20] rounded-md shadow-lg z-20">
                                     <button onClick={() => signOut(auth)} className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">
                                         <LogoutIcon className="w-5 h-5"/>
                                         <span>Logout</span>
@@ -358,8 +384,14 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                     </div>
                 </header>
 
+                {/* Rate Limit Indicator */}
+                {rateLimitInfo.remaining < 5 && (
+                    <div className="bg-yellow-900/50 text-yellow-200 px-4 py-2 text-sm text-center">
+                        ⚠️ {rateLimitInfo.remaining} requests remaining this minute
+                    </div>
+                )}
+
                 <div ref={scrollContainerRef} className="flex-grow overflow-y-auto p-4">
-                   {/* vvvvvvvvvv THIS IS THE MODIFIED LINE vvvvvvvvvv */}
                    <div className="w-full max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto">
                          {(!currentChatId && messages.length === 0 && !streamingMessage) ? (
                             <WelcomeScreen userName={user.email} />
@@ -372,7 +404,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                     </div>
                 </div>
                 
-                {/* We wrap ChatInput to control its width from here, ensuring alignment */}
                 <div className="w-full max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto">
                     <ChatInput
                         input={input}
