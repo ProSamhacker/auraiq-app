@@ -318,7 +318,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                 fullText += delta;
                 setStreamingMessage({ id: aiMessageId, text: fullText, sender: "ai" });
               }
-            } catch (_parseError) {
+            } catch {
               // Ignore JSON parse errors
             }
           }
