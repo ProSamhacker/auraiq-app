@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
           const urlRegex = /https:\/\/[\w.-]+\.public\.blob\.vercel-storage\.com\/[^\s\])]+/g;
           const matches = msg.text?.match(urlRegex);
           if (matches) {
-            matches.forEach(url => referencedUrls.add(url));
+            matches.forEach((url: string) => referencedUrls.add(url));
           }
         });
       }

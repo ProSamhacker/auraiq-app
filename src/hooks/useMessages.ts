@@ -1,9 +1,8 @@
-// src/hooks/useMessages.ts - Custom hook for message management
+// src/hooks/useMessages.ts - Fixed to work with subcollections
 
 import { useState, useEffect } from 'react';
-import { Firestore } from 'firebase/firestore';
+import { Firestore, collection, query, orderBy, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { Message } from '@/lib/types';
-import { subscribeToMessages } from '@/lib/messageStorage';
 
 export function useMessages(
   userId: string | undefined,
@@ -16,16 +15,29 @@ export function useMessages(
   useEffect(() => {
     if (!userId || !chatId) {
       setMessages([]);
+      setLoading(false);
       return;
     }
 
     setLoading(true);
-    const unsubscribe = subscribeToMessages(
-      db,
-      userId,
-      chatId,
-      (newMessages) => {
-        setMessages(newMessages);
+
+    // Subscribe to messages subcollection
+    const messagesRef = collection(db, 'users', userId, 'chats', chatId, 'messages');
+    const q = query(messagesRef, orderBy('timestamp', 'asc'));
+
+    const unsubscribe: Unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const loadedMessages: Message[] = snapshot.docs.map(doc => ({
+          id: doc.id,
+          text: doc.data().text || '',
+          sender: doc.data().sender || 'ai',
+        }));
+        setMessages(loadedMessages);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching messages:', error);
         setLoading(false);
       }
     );
