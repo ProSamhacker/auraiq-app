@@ -18,7 +18,7 @@ const compat = new FlatCompat({
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals"),
   
-  // Your custom rules from the old .eslintrc.json can go here
+  // Your custom rules from the old .eslintrc.json
   {
     rules: {
       "@typescript-eslint/no-unused-vars": [
