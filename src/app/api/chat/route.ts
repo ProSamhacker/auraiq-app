@@ -501,7 +501,8 @@ export async function POST(req: NextRequest) {
       content: msg.text
     }));
 
-    const systemMessage = { role: "system", content: context || "You are AuraIQ, a helpful and intelligent AI assistant." };
+   const basePrompt = "You are AuraIQ, a helpful and intelligent AI assistant. Always format your responses using Markdown. Use lists, bold text, and code blocks where appropriate.";
+    const systemMessage = { role: "system", content: context ? `${context}\n\n${basePrompt}` : basePrompt };
 
     const userMessageContent = [];
     if (hasImage && !textContent.trim()) {
