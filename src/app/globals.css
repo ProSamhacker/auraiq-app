@@ -1,54 +1,14 @@
 @import "tailwindcss";
 
-/* MODIFICATION: This block scales the entire UI down */
-html {
-  /* Base font size for mobile (zoomed out) */
-  font-size: 14px;
-  @media (max-width: 767px) {
-  /*
-    This block applies a "zoom out" effect for mobile screens only.
-    It scales the entire application down to 90% of its size.
-  */
-  body > div:first-child {
-    transform: scale(0.9);
-    transform-origin: top left;
-    width: 100.11%;
-    height: 111.11%;
-    overflow-x: hidden;
-  }
-}
-}
-
-@media (min-width: 768px) {
-  /* Larger font size for tablets and desktops (md breakpoint) */
-  html {
-    font-size: 17px;
-  }
-}
-
-html,
-body {
-  height: 100%;
-  overflow: hidden;
-  touch-action: none;
-}
-
-/* This targets the main Next.js wrapper */
-body > div:first-child,
-div#__next,
-div#__next > div {
-  height: 100%;
-}
+/* ===== ROOT & VIEWPORT SETUP ===== */
 :root {
   --background: #ffffff;
   --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Mobile safe areas (for notches/rounded corners) */
+  --safe-area-inset-top: env(safe-area-inset-top, 0);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0);
+  --safe-area-inset-left: env(safe-area-inset-left, 0);
+  --safe-area-inset-right: env(safe-area-inset-right, 0);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -58,12 +18,79 @@ div#__next > div {
   }
 }
 
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ===== BASE STYLES ===== */
+html {
+  /* Use 16px base - don't scale down on mobile */
+  font-size: 16px;
+  /* Prevent text size adjustment on iOS */
+  -webkit-text-size-adjust: 100%;
+  /* Better font rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body {
+  /* CRITICAL: Use 100dvh (dynamic viewport height) for mobile keyboard support */
+  /* dvh adjusts when keyboard appears/disappears */
+  height: 100dvh;
+  height: 100vh; /* Fallback for older browsers */
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  /* Prevent scrolling on the body */
+  overflow: hidden;
+  /* Prevent pull-to-refresh and overscroll */
+  overscroll-behavior: none;
+  /* Prevent iOS bounce */
+  position: fixed;
+  inset: 0;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  /* Better touch handling */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: pan-y;
 }
-/* ... (keep your keyframes animation) ... */
+
+/* Next.js root containers */
+body > div:first-child,
+div#__next,
+div#__next > div {
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+/* ===== MOBILE-SPECIFIC FIXES ===== */
+@media (max-width: 767px) {
+  /* Ensure proper touch scrolling on mobile */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Fix for iOS Safari address bar appearing/disappearing */
+  html {
+    height: -webkit-fill-available;
+  }
+
+  body {
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+  }
+}
+
+/* ===== BREATHING GLOW ANIMATION ===== */
 @keyframes breathing-glow {
   0% {
     transform: scale(1);
@@ -81,7 +108,7 @@ body {
 
 .breathing-border {
   position: relative;
-  border-radius: 9999px; /* rounded-full */
+  border-radius: 9999px;
 }
 
 .breathing-border::before {
@@ -91,9 +118,54 @@ body {
   left: -2px;
   right: -2px;
   bottom: -2px;
-  border-radius: 9999px; /* rounded-full */
+  border-radius: 9999px;
   background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
   background-size: 300% 300%;
   z-index: -1;
   animation: breathing-glow 6s ease-in-out infinite;
+}
+
+/* ===== SCROLLBAR STYLING ===== */
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.5);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+}
+
+/* ===== MOBILE INPUT FIX ===== */
+/* Prevent zoom on input focus (iOS) */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important; /* Prevents iOS zoom */
+  }
+}
+
+/* ===== SAFE AREA PADDING ===== */
+/* Add padding for devices with notches */
+.safe-area-padding {
+  padding-top: var(--safe-area-inset-top);
+  padding-bottom: var(--safe-area-inset-bottom);
+  padding-left: var(--safe-area-inset-left);
+  padding-right: var(--safe-area-inset-right);
 }

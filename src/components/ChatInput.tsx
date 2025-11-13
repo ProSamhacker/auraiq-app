@@ -18,9 +18,20 @@ const ChatInput: FC<ChatInputProps> = ({
   toggleContextActive, isContextActive, attachments, setAttachments 
 }) => {
   const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const [taskType, setTaskType] = useState<'auto' | 'daily' | 'coding'>('auto');
+  
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const newHeight = Math.min(textareaRef.current.scrollHeight, 150);
+      textareaRef.current.style.height = `${newHeight}px`;
+    }
+  }, [input]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -93,18 +104,22 @@ const ChatInput: FC<ChatInputProps> = ({
   }, []);
 
   return (
-    <div className="p-4 w-full md:max-w-2xl lg:max-w-3xl mx-auto">
+    <div className="w-full px-3 py-3 md:px-4 md:py-4">
       <form onSubmit={handleSubmit} className="relative">
+        {/* Attachments Display */}
         {attachments.length > 0 && (
-          <div className="p-3 bg-black/20 border-t border-x border-gray-700/50 rounded-t-xl flex flex-wrap gap-2">
+          <div className="mb-2 p-2 bg-gray-800/50 border border-gray-700/50 rounded-xl flex flex-wrap gap-2">
             {attachments.map((file, index) => (
-              <div key={index} className="bg-gray-600/80 text-white text-sm rounded-lg pl-2 pr-1 py-1 flex items-center gap-2 transition-colors hover:bg-gray-600">
+              <div 
+                key={index} 
+                className="bg-gray-700/80 text-white text-sm rounded-lg pl-2 pr-1 py-1.5 flex items-center gap-2 max-w-full"
+              >
                 <FileText className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate max-w-48">{file.name}</span>
+                <span className="truncate max-w-[180px] md:max-w-[250px]">{file.name}</span>
                 <button 
                   type="button" 
                   onClick={() => handleRemoveAttachment(index)} 
-                  className="bg-gray-500/50 hover:bg-gray-500 rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0"
+                  className="bg-gray-600/50 hover:bg-gray-600 active:bg-gray-500 rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 transition-colors"
                 >
                   <XIcon className="w-3.5 h-3.5"/>
                 </button>
@@ -113,85 +128,128 @@ const ChatInput: FC<ChatInputProps> = ({
           </div>
         )}
         
+        {/* Hidden File Input */}
         <input 
           type="file" 
           ref={fileInputRef} 
           onChange={handleFileChange}
           multiple 
           className="hidden"
+          accept="image/*,.pdf,.doc,.docx,.txt,.csv,.json"
         />
 
-        <div className={`relative flex items-center w-full bg-[#1e1f20] ${attachments.length > 0 ? 'rounded-b-full' : 'rounded-full'}`}>
+        {/* Input Container */}
+        <div className="relative flex items-end gap-2 bg-[#1e1f20] rounded-2xl px-2 py-2 shadow-lg border border-gray-700/50">
+          {/* Left Controls */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Context Toggle */}
             <button
               type="button" 
               onClick={toggleContextActive}
               title="Toggle Context & Memory"
-              className={`p-3 transition-colors rounded-full ${isContextActive ? 'text-blue-400 bg-gray-700' : 'text-gray-400 hover:text-white'}`}
+              className={`p-2.5 rounded-full transition-all ${
+                isContextActive 
+                  ? 'text-blue-400 bg-blue-500/20' 
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700 active:bg-gray-600'
+              }`}
             >
-              <Brain className="w-6 h-6" />
+              <Brain className="w-5 h-5" />
             </button>
 
+            {/* File Attach */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               title="Attach files"
-              className="p-3 text-gray-400 hover:text-white"
+              className="p-2.5 text-gray-400 hover:text-white hover:bg-gray-700 active:bg-gray-600 rounded-full transition-all"
             >
-              <Paperclip className="w-6 h-6" />
+              <Paperclip className="w-5 h-5" />
             </button>
-            
+
+            {/* Task Type Selector - Hidden on small mobile */}
             <select
               value={taskType}
               onChange={(e) => setTaskType(e.target.value as 'auto' | 'daily' | 'coding')}
-              className="bg-transparent text-gray-400 text-sm focus:outline-none focus:ring-0 border-0"
+              className="hidden sm:block bg-transparent text-gray-400 text-xs md:text-sm px-1 focus:outline-none focus:ring-0 border-0 cursor-pointer hover:text-white transition-colors"
               title="Select Task Type"
             >
-              <option value="auto" className="bg-gray-800">Auto-Select</option>
-              <option value="daily" className="bg-gray-800">Daily Task</option>
-              <option value="coding" className="bg-gray-800">Coding Task</option>
+              <option value="auto" className="bg-gray-800">Auto</option>
+              <option value="daily" className="bg-gray-800">Daily</option>
+              <option value="coding" className="bg-gray-800">Code</option>
             </select>
+          </div>
             
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit(e);
-                }
-              }}
-              placeholder={isListening ? "Listening..." : "Ask AuraIQ..."}
-              className="flex-grow bg-transparent text-gray-200 resize-none focus:outline-none p-3 pr-24"
-              rows={1}
-              disabled={isLoading}
-            />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
-                <button 
-                  type="button"
-                  onClick={handleMicClick}
-                  className={`p-2 rounded-full transition-colors ${isListening ? 'text-red-500 animate-pulse' : 'text-gray-400 hover:bg-gray-700'}`}
-                >
-                    <Mic className="w-6 h-6" />
-                </button>
+          {/* Text Area */}
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e);
+              }
+            }}
+            placeholder={isListening ? "Listening..." : "Message AuraIQ..."}
+            className="flex-1 bg-transparent text-gray-200 text-base resize-none focus:outline-none py-2.5 px-2 min-h-[24px] max-h-[150px] overflow-y-auto"
+            rows={1}
+            disabled={isLoading}
+            style={{ 
+              scrollbarWidth: 'thin',
+              scrollbarColor: 'rgba(156, 163, 175, 0.3) transparent'
+            }}
+          />
 
-                {isLoading ? (
-                    <button
-                        type="button"
-                        onClick={handleStopGenerating}
-                        className="p-2 rounded-full bg-blue-600 hover:bg-blue-700 transition-colors"
-                    >
-                        <Square className="w-6 h-6 text-white" />
-                    </button>
-                ) : (
-                    <button
-                        type="submit"
-                        className="p-2 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-                        disabled={!input.trim() && attachments.length === 0}
-                    >
-                        <Send className="w-6 h-6 text-white" />
-                    </button>
-                )}
-            </div>
+          {/* Right Controls */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Microphone */}
+            <button 
+              type="button"
+              onClick={handleMicClick}
+              className={`p-2.5 rounded-full transition-all ${
+                isListening 
+                  ? 'text-red-500 bg-red-500/20 animate-pulse' 
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700 active:bg-gray-600'
+              }`}
+              title={isListening ? "Stop listening" : "Start voice input"}
+            >
+              <Mic className="w-5 h-5" />
+            </button>
+
+            {/* Send/Stop Button */}
+            {isLoading ? (
+              <button
+                type="button"
+                onClick={handleStopGenerating}
+                className="p-2.5 rounded-full bg-red-600 hover:bg-red-700 active:bg-red-800 transition-colors shadow-lg"
+                title="Stop generating"
+              >
+                <Square className="w-5 h-5 text-white" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="p-2.5 rounded-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors shadow-lg"
+                disabled={!input.trim() && attachments.length === 0}
+                title="Send message"
+              >
+                <Send className="w-5 h-5 text-white" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Task Type Selector for Mobile - Below input */}
+        <div className="sm:hidden mt-2 flex justify-center">
+          <select
+            value={taskType}
+            onChange={(e) => setTaskType(e.target.value as 'auto' | 'daily' | 'coding')}
+            className="bg-gray-800 text-gray-300 text-sm px-3 py-1.5 rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="auto">Auto-Select</option>
+            <option value="daily">Daily Task</option>
+            <option value="coding">Coding Task</option>
+          </select>
         </div>
       </form>
     </div>

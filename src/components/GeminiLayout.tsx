@@ -1,4 +1,4 @@
-// src/components/GeminiLayout.tsx - Refactored with proper hooks and subcollections
+// src/components/GeminiLayout.tsx - Mobile-Optimized Layout
 
 "use client";
 
@@ -26,7 +26,7 @@ interface GeminiLayoutProps {
 
 const WelcomeScreen: FC<{ userName: string | null }> = ({ userName }) => (
   <div className="flex flex-col items-center justify-center h-full text-center px-4">
-    <h1 className="text-4xl md:text-5xl font-bold text-blue-400 mb-4 break-all">
+    <h1 className="text-4xl md:text-5xl font-bold text-blue-400 mb-4">
       Hello, {userName || 'User'}
     </h1>
     <p className="text-gray-400 text-lg mb-8">How can I help you today?</p>
@@ -34,12 +34,10 @@ const WelcomeScreen: FC<{ userName: string | null }> = ({ userName }) => (
 );
 
 const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
-  // Use custom hooks
   const { chats, currentChatId, setCurrentChatId, createNewChat } = useChats(user?.uid, db);
   const { contextFiles } = useContextFiles(user?.uid, db);
   const { messages, setMessages } = useMessages(user?.uid, currentChatId, db);
 
-  // Local state
   const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [input, setInput] = useState("");
@@ -58,19 +56,20 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (scrollContainerRef.current) {
-      const { scrollHeight } = scrollContainerRef.current;
-      scrollContainerRef.current.scrollTop = scrollHeight;
+      scrollContainerRef.current.scrollTo({
+        top: scrollContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
   }, [messages, streamingMessage]);
 
-  // Save streaming message when it's complete
+  // Save streaming message when complete
   useEffect(() => {
     if (streamingMessage) {
       finalStreamingMessage.current = streamingMessage;
     }
   }, [streamingMessage]);
 
-  // Save final streaming message to Firestore
   useEffect(() => {
     const saveFinalMessage = async () => {
       if (!isLoading && finalStreamingMessage.current && currentChatId) {
@@ -78,7 +77,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         if (finalMessage.text.trim()) {
           try {
             await addMessage(db, user.uid, currentChatId, finalMessage);
-            // Message will be automatically added via the useMessages subscription
           } catch (error) {
             console.error('Error saving final message:', error);
           }
@@ -87,11 +85,9 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         finalStreamingMessage.current = null;
       }
     };
-
     saveFinalMessage();
   }, [isLoading, currentChatId, user.uid, db]);
 
-  // Handlers
   const handleNewChat = () => {
     createNewChat();
     setIsSlideoutOpen(false);
@@ -105,7 +101,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
   const handleDeleteChat = async (chatId: string) => {
     if (!chatId) return;
     try {
-      // Get all messages and extract blob URLs
       const messagesRef = collection(db, 'users', user.uid, 'chats', chatId, 'messages');
       const messagesSnapshot = await getDocs(messagesRef);
       const urlsToDelete: string[] = [];
@@ -114,12 +109,9 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       messagesSnapshot.docs.forEach(doc => {
         const message = doc.data();
         const matches = message.text?.match(urlRegex);
-        if (matches) {
-          urlsToDelete.push(...matches);
-        }
+        if (matches) urlsToDelete.push(...matches);
       });
 
-      // Delete blob files
       if (urlsToDelete.length > 0) {
         const token = await user.getIdToken();
         await fetch('/api/delete-files', {
@@ -132,10 +124,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         });
       }
 
-      // Delete all messages in subcollection
       await deleteAllMessages(db, user.uid, chatId);
-
-      // Delete the chat document
       await deleteDoc(doc(db, 'users', user.uid, 'chats', chatId));
 
       if (currentChatId === chatId) {
@@ -207,7 +196,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
-    // Create user message
     const userMessageText = attachments.length > 0
       ? `${input}\n[ATTACHMENTS:${attachments.map(f => f.name).join('|||')}]`
       : input;
@@ -221,7 +209,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const tempInput = input;
     const tempAttachments = attachments;
 
-    // Optimistically add user message
     setMessages(prev => [...prev, userMessage]);
     setInput("");
     setAttachments([]);
@@ -230,7 +217,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     let tempChatId = currentChatId;
 
     try {
-      // Create new chat if needed
       if (!tempChatId) {
         const newChatRef = await addDoc(collection(db, 'users', user.uid, 'chats'), {
           title: tempInput.substring(0, 30) + (tempInput.length > 30 ? "..." : ""),
@@ -242,10 +228,8 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         setCurrentChatId(newChatRef.id);
       }
 
-      // Save user message to subcollection
       await addMessage(db, user.uid, tempChatId, userMessage);
 
-      // Prepare API request
       const formData = new FormData();
       formData.append("input", tempInput);
       formData.append("taskType", taskType);
@@ -261,10 +245,8 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         formData.append("files", file);
       });
 
-      // Get auth token
       const token = await user.getIdToken();
 
-      // Call API
       const response = await fetch("/api/chat", {
         method: "POST",
         body: formData,
@@ -274,7 +256,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         signal: abortController.signal,
       });
 
-      // Extract rate limit info
       const remaining = response.headers.get('X-RateLimit-Remaining');
       const limit = response.headers.get('X-RateLimit-Limit');
       if (remaining && limit) {
@@ -283,11 +264,9 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
 
       if (!response.ok) {
         const errorData = await response.json();
-
         if (response.status === 429) {
           throw new Error("Rate limit exceeded. Please wait a minute before trying again.");
         }
-
         throw new Error(errorData.error || "API error");
       }
 
@@ -295,7 +274,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         throw new Error("No response body");
       }
 
-      // Stream the response
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       const aiMessageId = (Date.now() + 1).toString();
@@ -323,7 +301,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                 setStreamingMessage({ id: aiMessageId, text: fullText, sender: "ai" });
               }
             } catch {
-              // Ignore JSON parse errors
+              // Ignore parse errors
             }
           }
         }
@@ -350,13 +328,15 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
   };
 
   return (
-    <div className="flex h-full bg-[#131314] text-white">
+    <div className="flex h-screen w-full bg-[#131314] text-white overflow-hidden">
+      {/* Desktop Sidebar */}
       <GeminiDesktopSidebar
         onNewChat={handleNewChat}
         toggleMobileSidebar={() => setIsSlideoutOpen(true)}
         auth={auth}
       />
 
+      {/* Mobile Slideout */}
       <GeminiSidebar
         isOpen={isSlideoutOpen}
         onClose={() => setIsSlideoutOpen(false)}
@@ -368,40 +348,50 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         onRenameChat={handleRenameChat}
       />
 
-      <main className="flex-grow flex flex-col relative overflow-hidden">
+      {/* Main Chat Area */}
+      <main className="flex-1 flex flex-col min-w-0 relative">
         {/* Mobile Header */}
-        <header className="flex items-center justify-between p-4 flex-shrink-0 md:hidden z-10 bg-[#131314] border-b border-gray-800">
+        <header className="flex md:hidden items-center justify-between px-4 py-3 flex-shrink-0 bg-[#131314] border-b border-gray-800 z-10">
           <button
             onClick={() => setIsSlideoutOpen(true)}
-            className="p-2 rounded-full hover:bg-gray-800"
+            className="p-2 rounded-full hover:bg-gray-800 active:bg-gray-700 transition-colors"
           >
             <MenuIcon className="w-6 h-6" />
           </button>
-          <h1 className="font-medium">AuraIQ</h1>
+          <h1 className="font-semibold text-lg">AuraIQ</h1>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsContextPanelOpen(true)}
-              className="p-2 rounded-full hover:bg-gray-800"
+              className="p-2 rounded-full hover:bg-gray-800 active:bg-gray-700 transition-colors"
             >
-              <BrainCircuit className="w-6 h-6 text-gray-400 animate-pulse" />
+              <BrainCircuit className="w-6 h-6 text-gray-400" />
             </button>
             <div className="relative">
               <button
                 onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center"
+                className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center active:bg-gray-600 transition-colors"
               >
-                <UserIcon className="w-6 h-6" />
+                <UserIcon className="w-5 h-5" />
               </button>
               {isProfileMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-[#1e1f20] rounded-md shadow-lg z-20">
-                  <button
-                    onClick={() => signOut(auth)}
-                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
-                  >
-                    <LogoutIcon className="w-5 h-5" />
-                    <span>Logout</span>
-                  </button>
-                </div>
+                <>
+                  <div 
+                    className="fixed inset-0 z-10" 
+                    onClick={() => setIsProfileMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-48 bg-[#1e1f20] rounded-lg shadow-xl z-20 overflow-hidden">
+                    <button
+                      onClick={() => {
+                        signOut(auth);
+                        setIsProfileMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-700 active:bg-gray-600 transition-colors"
+                    >
+                      <LogoutIcon className="w-5 h-5" />
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -409,14 +399,20 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
 
         {/* Rate Limit Warning */}
         {rateLimitInfo.remaining < 5 && (
-          <div className="bg-yellow-900/50 text-yellow-200 px-4 py-2 text-sm text-center">
+          <div className="flex-shrink-0 bg-yellow-900/50 text-yellow-200 px-4 py-2 text-sm text-center">
             ⚠️ {rateLimitInfo.remaining} requests remaining this minute
           </div>
         )}
 
-        {/* Chat Area */}
-        <div ref={scrollContainerRef} className="flex-grow overflow-y-auto p-4">
-          <div className="w-full max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto">
+        {/* Chat Messages Area - Scrollable */}
+        <div 
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto overscroll-contain"
+          style={{
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          <div className="max-w-4xl mx-auto px-4 py-4 md:py-6">
             {(!currentChatId && messages.length === 0 && !streamingMessage) ? (
               <WelcomeScreen userName={user.email} />
             ) : (
@@ -425,27 +421,32 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                   <ChatBubble key={msg.id} message={msg} />
                 ))}
                 {streamingMessage && <ChatBubble message={streamingMessage} />}
+                {/* Spacer for better mobile experience */}
+                <div className="h-4 md:h-8" />
               </>
             )}
           </div>
         </div>
 
-        {/* Input Area */}
-        <div className="w-full max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto">
-          <ChatInput
-            input={input}
-            setInput={setInput}
-            isLoading={isLoading}
-            handleSendMessage={handleSendMessage}
-            handleStopGenerating={handleStopGenerating}
-            toggleContextActive={() => setIsContextActive(!isContextActive)}
-            isContextActive={isContextActive}
-            attachments={attachments}
-            setAttachments={setAttachments}
-          />
+        {/* Input Area - Sticky to Bottom */}
+        <div className="flex-shrink-0 border-t border-gray-800 bg-[#131314]">
+          <div className="max-w-4xl mx-auto">
+            <ChatInput
+              input={input}
+              setInput={setInput}
+              isLoading={isLoading}
+              handleSendMessage={handleSendMessage}
+              handleStopGenerating={handleStopGenerating}
+              toggleContextActive={() => setIsContextActive(!isContextActive)}
+              isContextActive={isContextActive}
+              attachments={attachments}
+              setAttachments={setAttachments}
+            />
+          </div>
         </div>
       </main>
 
+      {/* Context Panel */}
       <ContextPanel
         context={context}
         setContext={setContext}
