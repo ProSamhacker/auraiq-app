@@ -1,12 +1,10 @@
 import tailwindcss from "@tailwindcss/postcss";
 import typography from "@tailwindcss/typography";
 
+/** @type {import('postcss-load-config').Config} */
 const config = {
   plugins: [
     tailwindcss({
-      // This is where you can add your tailwind.config.ts path if needed
-      // config: './tailwind.config.ts', 
-      
       // Add the typography plugin here
       plugins: [typography()],
     }),
