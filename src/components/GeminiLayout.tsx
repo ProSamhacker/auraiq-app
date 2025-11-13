@@ -121,9 +121,13 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
 
       // Delete blob files
       if (urlsToDelete.length > 0) {
+        const token = await user.getIdToken();
         await fetch('/api/delete-files', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify({ urls: urlsToDelete }),
         });
       }

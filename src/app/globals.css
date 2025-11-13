@@ -1,30 +1,33 @@
 @import "tailwindcss";
 
-/* MODIFICATION: This block scales the entire UI down */
+/* MODIFICATION: Responsive font sizes without scaling */
 html {
-  /* Base font size for mobile (zoomed out) */
-  font-size: 14px; 
-  @media (max-width: 767px) {
-  /*
-    This block applies a "zoom out" effect for mobile screens only.
-    It scales the entire application down to 90% of its size.
-  */
-  body > div:first-child {
-    transform: scale(0.9);
-    transform-origin: top left;
-    width: 100.11%;
-    height: 111.11%;
-    overflow-x: hidden;
-  }
+  /* Base font size for mobile */
+  font-size: 14px;
 }
+
+@media (min-width: 640px) {
+  /* Small tablets and larger */
+  html {
+    font-size: 15px;
+  }
 }
 
 @media (min-width: 768px) {
-  /* Larger font size for tablets and desktops (md breakpoint) */
+  /* Tablets and larger */
+  html {
+    font-size: 16px;
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Desktops and larger */
   html {
     font-size: 17px;
   }
 }
+
+/* Removed duplicate media query - now handled above */
 
 html,
 body {
