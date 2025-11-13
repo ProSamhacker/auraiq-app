@@ -103,7 +103,7 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
             : "bg-gray-800 text-gray-300 rounded-bl-none"
         }`}
       >
-        <div className="prose prose-invert prose-p:my-2 text-sm leading-relaxed">
+        <div className="prose prose-invert prose-p:my-2 text-sm leading-relaxed break-words">
           {promptText && (
             <ReactMarkdown components={customComponents}>
               {promptText}

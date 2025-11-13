@@ -23,9 +23,9 @@
   - [ ] Uncomment Redis implementation in `rateLimit.ts`
   - [ ] Ensure proper async handling
 
-- [x] **UI Enhancement**: Fix mobile responsive design
-  - [x] Remove transform scale from `globals.css`
-  - [x] Implement proper responsive font sizes
+- [ ] **UI Enhancement**: Fix mobile responsive design
+  - [ ] Remove transform scale from `globals.css`
+  - [ ] Implement proper Tailwind responsive utilities
 
 ## 🧪 Testing
 - [x] Test authentication on file deletion - ✅ PASSED (401 Unauthorized without token)
