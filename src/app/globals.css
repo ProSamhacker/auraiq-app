@@ -169,3 +169,45 @@ div#__next > div {
   padding-left: var(--safe-area-inset-left);
   padding-right: var(--safe-area-inset-right);
 }
+
+/* ===== MOBILE KEYBOARD ADJUSTMENTS (NEW) ===== */
+@media (max-width: 767px) {
+  :root {
+    --keyboard-height: 0px;
+  }
+
+  /* This class will be added to the main layout div */
+  .chat-container {
+    height: calc(100dvh - var(--keyboard-height));
+    transition: height 0.2s ease-out;
+  }
+
+  /* This class will be added to the input area's wrapper div */
+  .input-container {
+    padding-bottom: max(env(safe-area-inset-bottom), var(--keyboard-height));
+  }
+
+  /* Better touch scrolling */
+  .chat-messages {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Optimize animations for mobile */
+  @media (prefers-reduced-motion: no-preference) {
+    .message-enter {
+      animation: slideInUp 0.3s ease-out;
+    }
+  }
+
+  @keyframes slideInUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
