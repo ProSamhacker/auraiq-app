@@ -501,7 +501,15 @@ export async function POST(req: NextRequest) {
       content: msg.text
     }));
 
-   const basePrompt = "You are AuraIQ, a helpful and intelligent AI assistant. Always format your responses using Markdown. Use lists, bold text, and code blocks where appropriate.";
+   const basePrompt = `You are AuraIQ, a helpful and intelligent AI assistant.
+    ALWAYS format your responses using GitHub-flavored Markdown.
+    - Use lists for items.
+    - Use **bold** for headings and important terms.
+    - Use code blocks (\`\`\`language\ncode\n\`\`\`) for code.
+    - **IMPORTANT**: For tabular data, ALWAYS use Markdown tables (with | and ---), not code blocks.
+    - **NEVER** use HTML tags like <br>. Use Markdown newlines (a blank line) instead.
+    - Ensure there is proper spacing and line breaks for readability.`;
+    
     const systemMessage = { role: "system", content: context ? `${context}\n\n${basePrompt}` : basePrompt };
 
     const userMessageContent = [];

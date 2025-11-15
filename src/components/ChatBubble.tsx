@@ -5,6 +5,8 @@ import { Message } from "../lib/types";
 import { BotIcon, UserIcon, CopyIcon, CheckIcon } from "./Icons";
 import { FileText } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import rehypeRaw from 'rehype-raw';
+import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "@/styles/oneDark";
 
@@ -48,39 +50,56 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
   };
 
   // ✅ Markdown + Code renderer
-  const customComponents = {
-    code({
-      inline,
-      className,
-      children,
-      ...props
-    }: {
-      inline?: boolean;
-      className?: string;
-      children?: React.ReactNode;
-    }) {
-      const match = /language-(\w+)/.exec(className || "");
-      return !inline && match ? (
-        <div className="overflow-x-auto bg-[#0d1117] rounded-md my-2 text-xs md:text-sm p-4 leading-relaxed">
-          <SyntaxHighlighter
-            style={oneDark}
-            language={match[1]}
-            PreTag="div"
-            {...props}
-          >
-            {String(children).replace(/\n$/, "")}
-          </SyntaxHighlighter>
-        </div>
-      ) : (
-        <code
-          className="bg-gray-700 rounded-md px-1.5 py-0.5 break-words"
-          {...props}
-        >
-          {children}
-        </code>
+const customComponents = {
+  code({
+    inline,
+    className,
+    children,
+    ...props
+  }: {
+    inline?: boolean;
+    className?: string;
+    children?: React.ReactNode;
+  }) {
+    const match = /language-(\w+)/.exec(className || "");
+
+    // Handle non-inline (block) code
+    if (!inline) {
+      // If it has a language, use syntax highlighter
+      if (match) {
+        return (
+          <div className="overflow-x-auto bg-[#0d1117] rounded-md my-2 text-xs md:text-sm p-4 leading-relaxed">
+            <SyntaxHighlighter
+              style={oneDark}
+              language={match[1]}
+              PreTag="div"
+              {...props}
+            >
+              {String(children).replace(/\n$/, "")}
+            </SyntaxHighlighter>
+          </div>
+        );
+      }
+      // If it's a block but NO language (like the table), render it as a simple pre-formatted block.
+      // The 'prose' class from Tailwind Typography will style this.
+      return (
+        <pre className="bg-[#0d1117] overflow-x-auto p-4 rounded-md" {...props}>
+          <code>{children}</code>
+        </pre>
       );
-    },
-  };
+    }
+
+    // Handle inline code
+    return (
+      <code
+        className="bg-gray-700 rounded-md px-1.5 py-0.5 break-words"
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  },
+};
 
   return (
     <div
@@ -96,20 +115,25 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message }) => {
       )}
 
       {/* 💬 Message bubble */}
-      <div
+     <div
         className={`relative w-fit max-w-[90%] md:max-w-xl lg:max-w-3xl p-3 rounded-2xl ${
           isUser
             ? "bg-blue-600 text-white rounded-br-none"
             : "bg-gray-800 text-gray-300 rounded-bl-none"
         }`}
       >
-        <div className="prose prose-invert prose-p:my-2 text-sm leading-relaxed break-words">
-          {promptText && (
-            <ReactMarkdown components={customComponents}>
-              {promptText}
-            </ReactMarkdown>
-          )}
-        </div>
+
+     <div className="prose prose-invert prose-p:my-2 text-sm leading-relaxed break-words">
+    {promptText && (
+    <ReactMarkdown
+      components={customComponents}
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw]} // <--- ADD THIS PROP
+    >
+      {promptText}
+    </ReactMarkdown>
+    )}
+    </div>
 
         {/* 📎 File attachments (for user messages) */}
         {isUser && attachedFiles.length > 0 && (
