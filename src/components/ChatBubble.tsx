@@ -239,13 +239,13 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) 
       {/* Message bubble */}
       <div
         className={`relative w-fit max-w-[90%] md:max-w-2xl lg:max-w-3xl rounded-2xl transition-all ${
-          isUser
-            ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-none shadow-lg"
-            : "bg-gray-800/80 backdrop-blur-sm text-gray-300 rounded-bl-none border border-gray-700/50"
-        }`}
+            isUser
+              ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-none shadow-lg"
+              : " text-gray-300 rounded-bl-none"
+          }`}
       >
         {/* Content */}
-        <div className={`${isUser ? 'p-4' : 'p-5'}`}>
+        <div className={`${isUser ? 'py-0.5 px-4' : 'py-3 px-4'}`}>
           <div className="prose prose-invert max-w-none">
             {promptText && (
               <ReactMarkdown
