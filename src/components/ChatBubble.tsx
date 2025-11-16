@@ -189,11 +189,12 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) 
       </h3>
     ),
 
-    // Enhanced paragraphs
+    
+ // Enhanced paragraphs
     p: ({ children, ...props }: { children?: React.ReactNode }) => (
-      <p className="text-gray-300 leading-relaxed my-3" {...props}>
+      <div className="text-gray-300 leading-relaxed my-3" {...props}>
         {children}
-      </p>
+      </div>
     ),
 
     // Blockquotes

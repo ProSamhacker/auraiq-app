@@ -608,7 +608,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
 
         {/* Input Area - Sticky to Bottom */}
         {/* --- MODIFIED: Added 'input-container' class --- */}
-        <div className="input-container flex-shrink-0 border-t border-gray-800 bg-[#131314]">
+     <div className="flex-shrink-0 border-t border-gray-800 bg-[#131314]">
           <div className="max-w-4xl mx-auto">
             <ChatInput
               input={input}
@@ -624,6 +624,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
           </div>
         </div>
       </main>
+
 
       {/* Context Panel (no change) */}
       <ContextPanel
