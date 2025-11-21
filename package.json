@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/google": "^2.0.32",
     "@ai-sdk/openai": "^2.0.42",
     "@ducanh2912/next-pwa": "^10.2.9",
     "@upstash/ratelimit": "^2.0.6",

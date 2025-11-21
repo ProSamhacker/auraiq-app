@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title: "AuraIQ - Your AI Assistant",
   description: "Your intelligent AI assistant powered by advanced language models",
   manifest: "/manifest.json",
-  themeColor: "#131314",
+  // themeColor: "#131314", // <-- REMOVE THIS LINE
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -31,6 +31,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false, // Prevents zoom on input focus
   viewportFit: "cover", // Support for iPhone notch
+  themeColor: "#131314", // <-- ADD THIS LINE HERE
 };
 
 export default function RootLayout({
