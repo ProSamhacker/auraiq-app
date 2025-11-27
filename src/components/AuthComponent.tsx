@@ -1,18 +1,15 @@
-// src/components/AuthComponent.tsx
-
 "use client";
 
-import { useState, FC, FormEvent } from "react";
+import { useState, FC, FormEvent, useEffect } from "react";
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   Auth,
-  signInWithPopup,          // Import this
-  GoogleAuthProvider        // Import this
+  signInWithRedirect,            // CHANGED: Use redirect instead of popup
+  GoogleAuthProvider,            // Used for provider instance
+  getRedirectResult,             // NEW: To handle the sign-in result after redirect
 } from "firebase/auth";
-
-// You can import a Google Icon here if you have one, or use text
-// import { GoogleIcon } from "./Icons"; 
+import { Loader2 } from "lucide-react";
 
 interface AuthComponentProps {
   auth: Auth;
@@ -24,7 +21,28 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  // CHANGED: Start loading to check redirect result immediately
+  const [isLoading, setIsLoading] = useState(true); 
+
+  // --- NEW: Handle Redirect Result on Load ---
+  useEffect(() => {
+    // Check if the page loaded after a redirect (e.g., from Google sign-in)
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          // User successfully signed in via redirect
+          // The main app layout will detect the user state change
+          console.log("Redirect sign-in successful:", result.user.email);
+        }
+      })
+      .catch((err) => {
+        const errorMessage = err instanceof Error ? err.message : "An unknown error occurred during sign-in redirect.";
+        setError(errorMessage.replace("Firebase: ", ""));
+      })
+      .finally(() => {
+        setIsLoading(false); // Stop loading once redirect check is done
+      });
+  }, [auth]); // Dependency array includes 'auth'
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -51,23 +69,34 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
     }
   };
 
-  // --- NEW: Handle Google Login ---
+  // --- CHANGED: Use signInWithRedirect ---
   const handleGoogleLogin = async () => {
     setError("");
-    setIsLoading(true);
+    // We set loading true, but we don't set it to false in catch/finally
+    // because the page is about to redirect (i.e., this function won't finish)
+    setIsLoading(true); 
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      // No need to redirect manually; the onAuthStateChanged in your main app layout will handle the state change
+      // THIS IS THE FIX: Redirect bypasses COEP iframe restriction
+      await signInWithRedirect(auth, provider); 
     } catch (err) {
+      // In case the redirect process is blocked *before* redirecting (rare)
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
       setError(errorMessage.replace("Firebase: ", ""));
-      setIsLoading(false);
+      setIsLoading(false); // Only set false if it failed to redirect
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center justify-center h-screen bg-gray-900">
+    <div className="flex items-center justify-center h-full min-h-screen bg-gray-900">
       <div className="w-full max-w-md p-8 space-y-8 bg-gray-800 rounded-xl shadow-lg">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-white">AuraIQ</h1>
@@ -110,11 +139,11 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
             disabled={isLoading}
             className="w-full px-4 py-2 font-bold text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-600 transition-colors"
           >
-            {isLoading ? "Processing..." : isLogin ? "Login" : "Sign Up"}
+            {isLogin ? "Login" : "Sign Up"}
           </button>
         </form>
 
-        {/* --- NEW: Divider and Google Button --- */}
+        {/* --- Divider and Google Button --- */}
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-gray-600"></div>
@@ -151,7 +180,6 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
           </svg>
           Google
         </button>
-        {/* --- End New Section --- */}
 
         <p className="text-sm text-center text-gray-400">
           {isLogin ? "Don't have an account?" : "Already have an account?"}
