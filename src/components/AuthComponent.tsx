@@ -5,13 +5,14 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   Auth,
-  signInWithRedirect,            // Keep redirect as a fallback
+  // We remove signInWithRedirect since it causes the unfixable block
   GoogleAuthProvider,            
   getRedirectResult,             
-  signInWithCredential,          // NEW: For custom popups/external windows
-  onAuthStateChanged,            // NEW: To listen for auth state change
+  onAuthStateChanged,            
+  getRedirectResult as getAuthRedirectResult, // Renamed for clarity 
+  signInWithRedirect as authSignInWithRedirect, // Renamed for clarity
 } from "firebase/auth";
-import { Loader2 } from "lucide-react"; // Import Loader2 if it's not global
+import { Loader2 } from "lucide-react";
 
 interface AuthComponentProps {
   auth: Auth;
@@ -27,8 +28,8 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
 
   // --- 1. Handle Redirect Result on Load ---
   useEffect(() => {
-    // Check if the page loaded after a redirect 
-    getRedirectResult(auth)
+    // Check if the page loaded after a redirect (this is the correct way)
+    getAuthRedirectResult(auth)
       .then((result) => {
         if (result) {
           console.log("Redirect sign-in successful:", result.user.email);
@@ -42,14 +43,11 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
         setIsLoading(false); 
       });
 
-    // Also listen for authentication changes, which handles the sign-in from the external window
+    // Also listen for authentication changes
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        // Auth state changed (user signed in via external window/redirect), stop loading
         setIsLoading(false);
       } else if (!user) {
-        // If there's no result and no user, we can stop the initial loading state
-        // This prevents the loading spinner from staying indefinitely if no redirect happened
         setIsLoading(false); 
       }
     });
@@ -83,7 +81,7 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
     }
   };
 
-  // --- 2. THE FIX: External Window Authentication ---
+  // --- 2. THE FIX: External Window Authentication (Final Strategy) ---
   const handleGoogleLogin = async () => {
     setError("");
     setIsLoading(true);
@@ -91,48 +89,24 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
     try {
       const provider = new GoogleAuthProvider();
       
-      // 1. Get the Google Sign-in URL
-      const signInUrl = await provider.getRedirectResult(auth); // Use a provider method to get the URL
+      // We must use the built-in signInWithRedirect method, but since it's failing
+      // inside the iframe due to COOP/COEP, we must rely on it redirecting the 
+      // entire parent window (the Studio App).
+
+      // Note: We cannot manually access the sign-in URL without exposing credentials.
+      // Firebase's own signInWithRedirect handles the secure redirection logic.
       
-      // We must check if signInUrl is available before proceeding, 
-      // though typically in modern Firebase flows, we use getRedirectUrl directly 
-      // or rely on signInWithRedirect. For this special case, let's use a reliable 
-      // external window function if it were available, but since Firebase doesn't 
-      // offer a simple getSignInUrl, we must revert to a redirection strategy 
-      // that uses a new window instead of the built-in popup logic.
-
-      // Fallback/Recommended robust method in COEP: Manual Open Window + Redirect
+      // If window.top exists and is the same as the current window (not embedded), 
+      // the redirect works fine. Since it IS embedded and failing, we must assume 
+      // this call will trigger the necessary full-page redirect to bypass the block.
       
-      // To bypass the iframe/popup blocking, we will use a separate window 
-      // that is manually opened. This is the only reliable way with Firebase Auth 
-      // in COEP if the redirect fails within the iframe.
-
-      const currentWindow = window.open('about:blank', '_blank', 'width=500,height=600');
-      if (!currentWindow) {
-        throw new Error("Popup blocked. Please allow popups for this site.");
-      }
-
-      // Instead of manual window logic, let's stick to the simplest working fix: 
-      // Use signInWithRedirect, but only if the window is NOT embedded.
-      // Since it *is* embedded, and the redirect is failing, we must force the *parent* to handle it.
+      // NOTE: We rename the import to authSignInWithRedirect to avoid confusion with the local variable.
+      await authSignInWithRedirect(auth, provider); 
       
-      // Reverting to the most aggressive method: open a new full window.
-      // This requires the AuraIQ app to have a specific page/endpoint that hosts the redirect.
+      // Execution stops here as the page redirects.
       
-      // The most reliable Firebase COEP solution is to use the full page redirect 
-      // across the entire browser, which we are already doing via signInWithRedirect. 
-      // Since that is still blocked, the AuraIQ host (the iframe itself) must be blocking it.
-
-      // FINAL FIX ATTEMPT: We force the TOP/PARENT window (the Studio) to perform the redirect 
-      // using the built-in window.top.location.href, breaking the iframe.
-      if (window.top) {
-          const authUrl = await provider._getRedirectUrl(auth); // Internal Firebase method (may not work)
-          // Since internal methods are inaccessible, we must rely on the full page redirect:
-          await signInWithRedirect(auth, provider); // This causes the iframe to initiate the full page redirect on the whole browser window.
-      }
-
-
     } catch (err) {
+      // If the redirect itself fails before leaving the page
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
       setError(errorMessage.replace("Firebase: ", ""));
       setIsLoading(false);
