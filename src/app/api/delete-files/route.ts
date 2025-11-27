@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     if (!urls || !Array.isArray(urls)) {
       return NextResponse.json({ error: 'URLs must be an array.' }, { status: 400 });
     }
-
+    await adminAuth.verifyIdToken(authToken);
     await del(urls);
     return NextResponse.json({ success: true });
 

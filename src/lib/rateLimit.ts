@@ -2,6 +2,9 @@
 
 // For production, install: npm install @upstash/redis @upstash/ratelimit
 
+import { Redis } from '@upstash/redis';
+import { Ratelimit } from '@upstash/ratelimit';
+
 interface RateLimitResult {
   allowed: boolean;
   remaining: number;
@@ -60,17 +63,12 @@ export function memoryRateLimit(
   };
 }
 
-/**
- * Redis-based rate limiter (production)
- * Uncomment and use this if you have Redis configured
- */
-
-/*
-import { Redis } from '@upstash/redis';
-import { Ratelimit } from '@upstash/ratelimit';
-
 // Initialize Redis client
-const redis = Redis.fromEnv();
+// Ensure you have UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in your .env file
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL || '',
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+});
 
 // Create rate limiter
 const ratelimit = new Ratelimit({
@@ -89,7 +87,6 @@ export async function redisRateLimit(userId: string): Promise<RateLimitResult> {
     reset: reset * 1000, // Convert to milliseconds
   };
 }
-*/
 
 /**
  * Main rate limit function - uses Redis if available, falls back to memory
@@ -99,12 +96,12 @@ export async function checkRateLimit(userId: string): Promise<RateLimitResult> {
   const hasRedis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN;
 
   if (hasRedis) {
-    // Use Redis rate limiting (uncomment the import and function above)
-    // return await redisRateLimit(userId);
-    console.warn('Redis configured but not implemented. Using memory fallback.');
+    // Use Redis rate limiting
+    return await redisRateLimit(userId);
   }
 
   // Fallback to in-memory rate limiting
+  console.warn('Redis not configured. Using memory fallback.');
   return memoryRateLimit(userId);
 }
 
