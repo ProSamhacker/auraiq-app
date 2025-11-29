@@ -1,4 +1,4 @@
-// src/components/GeminiLayout.tsx - Mobile-Optimized Layout
+// src/components/GeminiLayout.tsx
 
 "use client";
 
@@ -15,45 +15,30 @@ import GeminiSidebar from './GeminiSidebar';
 import ChatInput from './ChatInput';
 import ContextPanel from './ContextPanel';
 import ChatBubble from './ChatBubble';
-import { BrainCircuit, Loader2 } from 'lucide-react'; // --- MODIFIED --- (Added Loader2)
-import { MenuIcon, UserIcon, LogoutIcon, BotIcon } from './Icons'; // --- MODIFIED --- (Added BotIcon)
+import { BrainCircuit, Loader2 } from 'lucide-react';
+import { MenuIcon, UserIcon, LogoutIcon, BotIcon } from './Icons';
 
-// --- NEW: All new components and hooks added below ---
+// --- COMPONENTS ---
 
-// Loading skeleton for messages
-export const MessageSkeleton = () => (
-  <div className="flex items-start gap-3 my-4 animate-pulse">
-    <div className="w-9 h-9 rounded-full bg-gray-700" />
-    <div className="flex-1 space-y-3">
-      <div className="h-4 bg-gray-700 rounded w-3/4" />
-      <div className="h-4 bg-gray-700 rounded w-full" />
-      <div className="h-4 bg-gray-700 rounded w-5/6" />
+// 1. Polished Typing Indicator (Matches ChatBubble style)
+export const TypingIndicator = () => (
+  <div className="flex items-start gap-3 my-4 fade-in">
+    {/* Bot Avatar */}
+    <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+      <BotIcon className="w-5 h-5 text-white" />
+    </div>
+    
+    {/* Animated Dots Bubble */}
+    <div className="flex items-center gap-1.5 bg-gray-800/80 border border-gray-700/50 backdrop-blur-sm rounded-2xl rounded-tl-none px-5 py-4 shadow-sm">
+      <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDuration: '1s', animationDelay: '0ms' }} />
+      <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDuration: '1s', animationDelay: '0.2s' }} />
+      <span className="w-2 h-2 bg-pink-400 rounded-full animate-bounce" style={{ animationDuration: '1s', animationDelay: '0.4s' }} />
     </div>
   </div>
 );
 
-// Loading indicator for "Load more" button
-export const LoadMoreButton = ({ onClick, loading }: { onClick: () => void; loading: boolean }) => (
-  <button
-    onClick={onClick}
-    disabled={loading}
-    className="w-full py-2 text-sm text-gray-400 hover:text-white transition-colors disabled:opacity-50"
-  >
-    {loading ? (
-      <span className="flex items-center justify-center gap-2">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Loading older messages...
-      </span>
-    ) : (
-      'Load older messages'
-    )}
-  </button>
-);
-
-// Enhanced scroll behavior for chat container
 export const useSmoothScroll = () => {
   const scrollToBottom = (smooth = true) => {
-    // --- MODIFIED --- (Uses new ID)
     const container = document.getElementById('chat-container');
     if (container) {
       container.scrollTo({
@@ -62,29 +47,15 @@ export const useSmoothScroll = () => {
       });
     }
   };
-
-  const scrollToTop = () => {
-    // --- MODIFIED --- (Uses new ID)
-    const container = document.getElementById('chat-container');
-    if (container) {
-      container.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
-    }
-  };
-
-  return { scrollToBottom, scrollToTop };
+  return { scrollToBottom };
 };
 
-// Enhanced mobile keyboard handling
 export const useMobileKeyboard = () => {
   useEffect(() => {
     const handleResize = () => {
       const viewport = window.visualViewport;
       if (viewport) {
         const isKeyboardOpen = viewport.height < window.innerHeight * 0.75;
-        
         if (isKeyboardOpen) {
           document.documentElement.style.setProperty('--keyboard-height', 
             `${window.innerHeight - viewport.height}px`);
@@ -93,7 +64,6 @@ export const useMobileKeyboard = () => {
         }
       }
     };
-
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', handleResize);
       return () => {
@@ -103,45 +73,13 @@ export const useMobileKeyboard = () => {
   }, []);
 };
 
-// Typing indicator component
-export const TypingIndicator = () => (
-  <div className="flex items-center gap-2 p-4">
-    <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center">
-      <BotIcon className="w-5 h-5 text-gray-400" />
-    </div>
-    <div className="flex items-center gap-1 bg-gray-800 rounded-2xl px-4 py-3">
-      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-    </div>
-  </div>
-);
-
-// Suggested prompts for the new empty state
 const SUGGESTED_PROMPTS = [
-  {
-    icon: '💡',
-    title: 'Explain a concept',
-    description: 'Get clear explanations of complex topics'
-  },
-  {
-    icon: '💻',
-    title: 'Write code',
-    description: 'Generate code with detailed comments'
-  },
-  {
-    icon: '📊',
-    title: 'Analyze data',
-    description: 'Get insights from your data files'
-  },
-  {
-    icon: '✍️',
-    title: 'Create content',
-    description: 'Write articles, emails, and more'
-  }
+  { icon: '💡', title: 'Explain a concept', description: 'Get clear explanations of complex topics' },
+  { icon: '💻', title: 'Write code', description: 'Generate code with detailed comments' },
+  { icon: '📊', title: 'Analyze data', description: 'Get insights from your data files' },
+  { icon: '✍️', title: 'Create content', description: 'Write articles, emails, and more' }
 ];
 
-// Empty state component (replaces WelcomeScreen)
 export const EmptyState: FC<{ userName: string | null; handlePromptClick: (prompt: { title: string }) => void; }> = ({ userName, handlePromptClick }) => (
   <div className="flex flex-col items-center justify-center h-full text-center px-4 py-12">
     <div className="w-20 h-20 mb-6 rounded-full bg-gray-700 flex items-center justify-center">
@@ -175,15 +113,13 @@ export const EmptyState: FC<{ userName: string | null; handlePromptClick: (promp
   </div>
 );
 
-// --- END of new components and hooks ---
+// --- MAIN COMPONENT ---
 
 interface GeminiLayoutProps {
   user: User;
   auth: Auth;
   db: Firestore;
 }
-
-// --- OLD WelcomeScreen removed ---
 
 const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
   const { chats, currentChatId, setCurrentChatId, createNewChat } = useChats(user?.uid, db);
@@ -205,17 +141,13 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const finalStreamingMessage = useRef<Message | null>(null);
 
-  // --- NEW: Call the new hooks ---
   const { scrollToBottom } = useSmoothScroll();
   useMobileKeyboard();
 
-  // --- MODIFIED: Replaced old scroll logic with new hook ---
   useEffect(() => {
-    // Scroll to bottom when messages or streaming message changes
     scrollToBottom();
   }, [messages, streamingMessage, scrollToBottom]);
 
-  // Save streaming message when complete (no change)
   useEffect(() => {
     if (streamingMessage) {
       finalStreamingMessage.current = streamingMessage;
@@ -240,7 +172,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     saveFinalMessage();
   }, [isLoading, currentChatId, user.uid, db]);
 
-  // (No changes to handleNewChat, handleSelectChat, handleDeleteChat, handleRenameChat, handleFileUpload, handleFileDelete, handleStopGenerating)
   const handleNewChat = () => {
     createNewChat();
     setIsSlideoutOpen(false);
@@ -342,10 +273,8 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     }
   };
   
-  // --- NEW: Function to handle clicking suggested prompts ---
   const handlePromptClick = (prompt: { title: string }) => {
     setInput(prompt.title);
-    // Focus the textarea after setting input
     const textarea = document.querySelector('textarea');
     if (textarea) textarea.focus();
   };
@@ -370,10 +299,15 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const tempInput = input;
     const tempAttachments = attachments;
 
+    // 1. Update UI immediately
     setMessages(prev => [...prev, userMessage]);
     setInput("");
     setAttachments([]);
     setIsLoading(true);
+
+    // 2. Set thinking state immediately (id uses future time to avoid collision)
+    const aiMessageId = (Date.now() + 1000).toString();
+    setStreamingMessage({ id: aiMessageId, text: "", sender: "ai" });
 
     let tempChatId = currentChatId;
 
@@ -437,10 +371,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      const aiMessageId = (Date.now() + 1).toString();
       let fullText = '';
-
-      setStreamingMessage({ id: aiMessageId, text: "", sender: "ai" });
 
       while (true) {
         const { value, done } = await reader.read();
@@ -459,6 +390,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
               const delta = parsed.choices?.[0]?.delta?.content;
               if (delta) {
                 fullText += delta;
+                // Update stream with accumulated text
                 setStreamingMessage({ id: aiMessageId, text: fullText, sender: "ai" });
               }
             } catch {
@@ -489,16 +421,13 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
   };
 
   return (
-    // --- MODIFIED: Added 'chat-container' class ---
     <div className="chat-container flex h-screen w-full bg-[#131314] text-white overflow-hidden">
-      {/* Desktop Sidebar */}
       <GeminiDesktopSidebar
         onNewChat={handleNewChat}
         toggleMobileSidebar={() => setIsSlideoutOpen(true)}
         auth={auth}
       />
 
-      {/* Mobile Slideout */}
       <GeminiSidebar
         isOpen={isSlideoutOpen}
         onClose={() => setIsSlideoutOpen(false)}
@@ -510,9 +439,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         onRenameChat={handleRenameChat}
       />
 
-      {/* Main Chat Area */}
       <main className="flex-1 flex flex-col min-w-0 relative">
-        {/* Mobile Header (no change) */}
         <header className="flex md:hidden items-center justify-between px-4 py-3 flex-shrink-0 bg-[#131314] border-b border-gray-800 z-10">
           <button
             onClick={() => setIsSlideoutOpen(true)}
@@ -559,39 +486,33 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
           </div>
         </header>
 
-        {/* Rate Limit Warning (no change) */}
         {rateLimitInfo.remaining < 5 && (
           <div className="flex-shrink-0 bg-yellow-900/50 text-yellow-200 px-4 py-2 text-sm text-center">
             ⚠️ {rateLimitInfo.remaining} requests remaining this minute
           </div>
         )}
 
-        {/* Chat Messages Area - Scrollable */}
         <div 
           ref={scrollContainerRef}
-          id="chat-container" // --- MODIFIED: Added ID for useSmoothScroll ---
-          className="chat-messages flex-1 overflow-y-auto overscroll-contain" // --- MODIFIED: Added 'chat-messages' class ---
+          id="chat-container"
+          className="chat-messages flex-1 overflow-y-auto overscroll-contain"
           style={{
             WebkitOverflowScrolling: 'touch',
           }}
         >
           <div className="max-w-4xl mx-auto px-4 py-4 md:py-6">
-            {/* --- MODIFIED: Replaced WelcomeScreen with EmptyState and added loading logic --- */}
             {(!currentChatId && messages.length === 0 && !streamingMessage && !isLoading) ? (
               <EmptyState userName={user.email} handlePromptClick={handlePromptClick} />
             ) : (
               <>
-                {/* NOTE: LoadMoreButton and MessageSkeleton are not fully implemented here
-                  as your useMessages hook needs to be updated to support pagination
-                  and expose a loading state. I've left the logic for them out
-                  to avoid breaking your current setup.
-                */}
-                
                 {messages.map(msg => (
                   <ChatBubble key={msg.id} message={msg} />
                 ))}
 
-                {/* --- MODIFIED: Show TypingIndicator when loading and stream is empty --- */}
+                {/* VISUAL LOGIC:
+                    1. streamingMessage exists AND has text -> Show ChatBubble (streaming content)
+                    2. streamingMessage exists AND no text -> Show TypingIndicator (thinking phase)
+                */}
                 {streamingMessage && (
                   streamingMessage.text ? (
                     <ChatBubble message={streamingMessage} />
@@ -606,9 +527,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
           </div>
         </div>
 
-        {/* Input Area - Sticky to Bottom */}
-        {/* --- MODIFIED: Added 'input-container' class --- */}
-     <div className="flex-shrink-0 border-t border-gray-800 bg-[#131314]">
+        <div className="flex-shrink-0 border-t border-gray-800 bg-[#131314]">
           <div className="max-w-4xl mx-auto">
             <ChatInput
               input={input}
@@ -625,8 +544,6 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         </div>
       </main>
 
-
-      {/* Context Panel (no change) */}
       <ContextPanel
         context={context}
         setContext={setContext}
