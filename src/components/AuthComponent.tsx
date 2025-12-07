@@ -5,12 +5,11 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   Auth,
-  // We remove signInWithRedirect since it causes the unfixable block
-  GoogleAuthProvider,            
-  getRedirectResult,             
-  onAuthStateChanged,            
-  getRedirectResult as getAuthRedirectResult, // Renamed for clarity 
-  signInWithRedirect as authSignInWithRedirect, // Renamed for clarity
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  onAuthStateChanged,
 } from "firebase/auth";
 import { Loader2 } from "lucide-react";
 
@@ -24,12 +23,14 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(true); 
+  const [isLoading, setIsLoading] = useState(true);
 
-  // --- 1. Handle Redirect Result on Load ---
+  // Check if we're in an iframe
+  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+
+  // Handle redirect result on component mount
   useEffect(() => {
-    // Check if the page loaded after a redirect (this is the correct way)
-    getAuthRedirectResult(auth)
+    getRedirectResult(auth)
       .then((result) => {
         if (result) {
           console.log("Redirect sign-in successful:", result.user.email);
@@ -40,22 +41,21 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
         setError(errorMessage.replace("Firebase: ", ""));
       })
       .finally(() => {
-        setIsLoading(false); 
+        setIsLoading(false);
       });
 
-    // Also listen for authentication changes
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setIsLoading(false);
       } else if (!user) {
-        setIsLoading(false); 
+        setIsLoading(false);
       }
     });
 
-    return () => unsubscribe(); // Cleanup listener
-  }, [auth]); 
+    return () => unsubscribe();
+  }, [auth]);
 
-  // --- Email/Password Form Submission (Unchanged) ---
+  // Email/Password Form Submission
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
@@ -81,38 +81,42 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
     }
   };
 
-  // --- 2. THE FIX: External Window Authentication (Final Strategy) ---
+  // FIXED: Smart Google Authentication
   const handleGoogleLogin = async () => {
     setError("");
     setIsLoading(true);
 
     try {
       const provider = new GoogleAuthProvider();
-      
-      // We must use the built-in signInWithRedirect method, but since it's failing
-      // inside the iframe due to COOP/COEP, we must rely on it redirecting the 
-      // entire parent window (the Studio App).
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
 
-      // Note: We cannot manually access the sign-in URL without exposing credentials.
-      // Firebase's own signInWithRedirect handles the secure redirection logic.
-      
-      // If window.top exists and is the same as the current window (not embedded), 
-      // the redirect works fine. Since it IS embedded and failing, we must assume 
-      // this call will trigger the necessary full-page redirect to bypass the block.
-      
-      // NOTE: We rename the import to authSignInWithRedirect to avoid confusion with the local variable.
-      await authSignInWithRedirect(auth, provider); 
-      
-      // Execution stops here as the page redirects.
-      
+      // Use popup for iframe contexts, redirect for standalone
+      if (isInIframe) {
+        console.log("Detected iframe context, using popup authentication");
+        try {
+          await signInWithPopup(auth, provider);
+        } catch (popupError: any) {
+          // If popup is blocked, inform user
+          if (popupError.code === 'auth/popup-blocked') {
+            setError("Popup blocked. Please allow popups for this site and try again.");
+          } else if (popupError.code === 'auth/popup-closed-by-user') {
+            setError("Sign-in cancelled. Please try again.");
+          } else {
+            throw popupError;
+          }
+        }
+      } else {
+        console.log("Using redirect authentication");
+        await signInWithRedirect(auth, provider);
+      }
     } catch (err) {
-      // If the redirect itself fails before leaving the page
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
       setError(errorMessage.replace("Firebase: ", ""));
       setIsLoading(false);
     }
   };
-
 
   if (isLoading) {
     return (
@@ -132,7 +136,7 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
         
         {/* Email/Password Form */}
         <form className="space-y-6" onSubmit={handleSubmit}>
-           <input
+          <input
             type="email"
             placeholder="Email"
             value={email}
@@ -170,7 +174,7 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
           </button>
         </form>
 
-        {/* --- Divider and Google Button --- */}
+        {/* Divider */}
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-gray-600"></div>
@@ -180,13 +184,13 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
           </div>
         </div>
 
+        {/* Google Sign-In Button */}
         <button
           type="button"
           onClick={handleGoogleLogin}
           disabled={isLoading}
           className="w-full flex items-center justify-center gap-3 px-4 py-2 bg-white text-gray-900 font-semibold rounded-md hover:bg-gray-100 transition-colors disabled:opacity-70"
         >
-          {/* Simple Google SVG Icon */}
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
               fill="currentColor"
@@ -208,6 +212,12 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
           Google
         </button>
 
+        {isInIframe && (
+          <p className="text-xs text-center text-yellow-400">
+            ℹ️ Embedded mode detected - using popup authentication
+          </p>
+        )}
+
         <p className="text-sm text-center text-gray-400">
           {isLogin ? "Don't have an account?" : "Already have an account?"}
           <button
@@ -225,4 +235,4 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
   );
 };
 
-export default AuthComponent;
+export default AuthComponent

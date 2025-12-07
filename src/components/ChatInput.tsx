@@ -1,5 +1,5 @@
 import { FC, FormEvent, useState, useRef, useEffect } from "react";
-import { Brain, Mic, Send, Square, Paperclip, XIcon, FileText } from "lucide-react"; 
+import { Brain, Mic, Send, Square, Paperclip, XIcon, FileText, AlertCircle } from "lucide-react";
 
 interface ChatInputProps {
   input: string;
@@ -13,12 +13,36 @@ interface ChatInputProps {
   setAttachments: (files: File[]) => void;
 }
 
+// FIXED: File validation constants
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
+const ALLOWED_FILE_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+  'text/csv',
+  'application/json',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+];
+
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+};
+
 const ChatInput: FC<ChatInputProps> = ({ 
   input, setInput, isLoading, handleSendMessage, handleStopGenerating, 
   toggleContextActive, isContextActive, attachments, setAttachments 
 }) => {
   const [isListening, setIsListening] = useState(false);
   const [taskType, setTaskType] = useState<'auto' | 'daily' | 'coding'>('auto');
+  const [validationError, setValidationError] = useState<string>("");
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -33,16 +57,74 @@ const ChatInput: FC<ChatInputProps> = ({
     }
   }, [input]);
 
+  // Clear validation error after 5 seconds
+  useEffect(() => {
+    if (validationError) {
+      const timer = setTimeout(() => setValidationError(""), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [validationError]);
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!input.trim() && attachments.length === 0) return; 
+    if (!input.trim() && attachments.length === 0) return;
+    
+    // Clear any validation errors
+    setValidationError("");
+    
     handleSendMessage(e, taskType);
-  }
+  };
+
+  // FIXED: Enhanced file validation
+  const validateFile = (file: File): string | null => {
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      return `File "${file.name}" exceeds 25MB limit (${formatFileSize(file.size)})`;
+    }
+
+    // Check file type
+    const isAllowedType = ALLOWED_FILE_TYPES.includes(file.type) || 
+                          file.type.startsWith('image/') ||
+                          file.type.startsWith('text/');
+    
+    if (!isAllowedType) {
+      return `File type "${file.type}" is not supported`;
+    }
+
+    // Check total size
+    const currentTotalSize = attachments.reduce((sum, f) => sum + f.size, 0);
+    if (currentTotalSize + file.size > MAX_TOTAL_SIZE) {
+      return `Total file size would exceed 50MB limit`;
+    }
+
+    return null;
+  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
       const newFiles = Array.from(event.target.files);
+      
+      // Validate each file
+      for (const file of newFiles) {
+        const error = validateFile(file);
+        if (error) {
+          setValidationError(error);
+          // Reset file input
+          if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+          }
+          return;
+        }
+      }
+      
+      // All files valid, add them
       setAttachments([...attachments, ...newFiles]);
+      setValidationError("");
+      
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
   
@@ -54,7 +136,7 @@ const ChatInput: FC<ChatInputProps> = ({
 
   const handleMicClick = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Speech recognition not supported in this browser');
+      setValidationError('Speech recognition not supported in this browser');
       return;
     }
 
@@ -86,6 +168,7 @@ const ChatInput: FC<ChatInputProps> = ({
 
     recognition.onerror = (event) => {
       console.error('Speech recognition error:', event.error);
+      setValidationError(`Speech recognition error: ${event.error}`);
       setIsListening(false);
     };
 
@@ -103,28 +186,69 @@ const ChatInput: FC<ChatInputProps> = ({
     };
   }, []);
 
+  // Calculate total size of attachments
+  const totalSize = attachments.reduce((sum, file) => sum + file.size, 0);
+  const sizePercentage = (totalSize / MAX_TOTAL_SIZE) * 100;
+
   return (
     <div className="w-full px-3 py-3 md:px-4 md:py-4">
       <form onSubmit={handleSubmit} className="relative">
+        {/* Validation Error Banner */}
+        {validationError && (
+          <div className="mb-2 p-3 bg-red-900/50 border border-red-700/50 rounded-xl flex items-center gap-2 text-sm text-red-200">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{validationError}</span>
+            <button
+              type="button"
+              onClick={() => setValidationError("")}
+              className="ml-auto p-1 hover:bg-red-800/50 rounded"
+            >
+              <XIcon className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Attachments Display */}
         {attachments.length > 0 && (
-          <div className="mb-2 p-2 bg-gray-800/50 border border-gray-700/50 rounded-xl flex flex-wrap gap-2">
-            {attachments.map((file, index) => (
-              <div 
-                key={index} 
-                className="bg-gray-700/80 text-white text-sm rounded-lg pl-2 pr-1 py-1.5 flex items-center gap-2 max-w-full"
-              >
-                <FileText className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate max-w-[180px] md:max-w-[250px]">{file.name}</span>
-                <button 
-                  type="button" 
-                  onClick={() => handleRemoveAttachment(index)} 
-                  className="bg-gray-600/50 hover:bg-gray-600 active:bg-gray-500 rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 transition-colors"
+          <div className="mb-2 p-2 bg-gray-800/50 border border-gray-700/50 rounded-xl">
+            <div className="flex flex-wrap gap-2 mb-2">
+              {attachments.map((file, index) => (
+                <div 
+                  key={index} 
+                  className="bg-gray-700/80 text-white text-sm rounded-lg pl-2 pr-1 py-1.5 flex items-center gap-2 max-w-full"
                 >
-                  <XIcon className="w-3.5 h-3.5"/>
-                </button>
+                  <FileText className="w-4 h-4 flex-shrink-0" />
+                  <div className="flex flex-col min-w-0">
+                    <span className="truncate max-w-[180px] md:max-w-[250px]">{file.name}</span>
+                    <span className="text-xs text-gray-400">{formatFileSize(file.size)}</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => handleRemoveAttachment(index)} 
+                    className="bg-gray-600/50 hover:bg-gray-600 active:bg-gray-500 rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 transition-colors"
+                  >
+                    <XIcon className="w-3.5 h-3.5"/>
+                  </button>
+                </div>
+              ))}
+            </div>
+            
+            {/* Size indicator */}
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              <div className="flex-1 bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                <div 
+                  className={`h-full transition-all ${
+                    sizePercentage > 80 ? 'bg-red-500' : 
+                    sizePercentage > 60 ? 'bg-yellow-500' : 
+                    'bg-blue-500'
+                  }`}
+                  style={{ width: `${sizePercentage}%` }}
+                />
               </div>
-            ))}
+              <span className={sizePercentage > 80 ? 'text-red-400' : ''}>
+                {formatFileSize(totalSize)} / {formatFileSize(MAX_TOTAL_SIZE)}
+              </span>
+            </div>
           </div>
         )}
         
@@ -135,7 +259,7 @@ const ChatInput: FC<ChatInputProps> = ({
           onChange={handleFileChange}
           multiple 
           className="hidden"
-          accept="image/*,.pdf,.doc,.docx,.txt,.csv,.json"
+          accept="image/*,.pdf,.doc,.docx,.txt,.csv,.json,.pptx,.xlsx"
         />
 
         {/* Input Container */}
@@ -161,7 +285,8 @@ const ChatInput: FC<ChatInputProps> = ({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               title="Attach files"
-              className="p-2.5 text-gray-400 hover:text-white hover:bg-gray-700 active:bg-gray-600 rounded-full transition-all"
+              disabled={attachments.length >= 5} // Limit to 5 files
+              className="p-2.5 text-gray-400 hover:text-white hover:bg-gray-700 active:bg-gray-600 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Paperclip className="w-5 h-5" />
             </button>

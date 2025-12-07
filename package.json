@@ -1,12 +1,13 @@
 {
-  "name": "your-ai-app",
+  "name": "auraiq-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.32",

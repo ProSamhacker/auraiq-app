@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useState, useCallback } from "react";
+import { FC, useState, useCallback, memo } from "react";
 import { Message } from "../lib/types";
 import { BotIcon, UserIcon, CopyIcon, CheckIcon, ThumbsUp, ThumbsDown, RefreshCw } from "lucide-react";
 import { FileText } from "lucide-react";
@@ -16,49 +16,68 @@ interface ChatBubbleProps {
   onFeedback?: (messageId: string, feedback: 'positive' | 'negative') => void;
 }
 
-const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) => {
-  const isUser = message.sender === "user";
+// OPTIMIZATION: Memoize code block component
+const CodeBlock = memo(({ 
+  language, 
+  code, 
+  messageId 
+}: { 
+  language: string; 
+  code: string; 
+  messageId: string;
+}) => {
   const [isCopied, setIsCopied] = useState(false);
-  const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null);
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const blockId = `${messageId}-${language}-${code.substring(0, 20)}`;
 
-  // Extract attachments
-  let promptText = message.text;
-  let attachedFiles: string[] = [];
-  const attachmentRegex = /\[ATTACHMENTS:(.*?)\]/;
-  const match = message.text.match(attachmentRegex);
-
-  if (match && match[1]) {
-    promptText = message.text.replace(attachmentRegex, "").trim();
-    attachedFiles = match[1].split("|||");
-  }
-
-  // Copy entire message
   const handleCopy = useCallback(() => {
-    const textToCopy = promptText || message.text;
-    navigator.clipboard.writeText(textToCopy).then(() => {
+    navigator.clipboard.writeText(code).then(() => {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     });
-  }, [promptText, message.text]);
+  }, [code]);
 
-  // Copy individual code block
-  const handleCopyCode = useCallback((code: string, blockId: string) => {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopiedCode(blockId);
-      setTimeout(() => setCopiedCode(null), 2000);
-    });
-  }, []);
+  return (
+    <div className="relative group my-4">
+      <div className="flex items-center justify-between bg-gray-900 px-4 py-2 rounded-t-lg border-b border-gray-700">
+        <span className="text-xs font-mono text-gray-400 uppercase">{language}</span>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-2 px-2 py-1 text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 rounded transition-colors"
+        >
+          {isCopied ? (
+            <>
+              <CheckIcon className="w-3.5 h-3.5 text-green-500" />
+              <span>Copied!</span>
+            </>
+          ) : (
+            <>
+              <CopyIcon className="w-3.5 h-3.5" />
+              <span>Copy code</span>
+            </>
+          )}
+        </button>
+      </div>
+      
+      <div className="overflow-x-auto bg-[#0d1117] rounded-b-lg">
+        <SyntaxHighlighter
+          style={oneDark}
+          language={language}
+          PreTag="div"
+          className="!m-0 !p-4 text-sm leading-relaxed"
+          showLineNumbers={code.split('\n').length > 5}
+        >
+          {code}
+        </SyntaxHighlighter>
+      </div>
+    </div>
+  );
+}, (prev, next) => prev.code === next.code && prev.language === next.language);
 
-  // Feedback handler
-  const handleFeedback = useCallback((type: 'positive' | 'negative') => {
-    setFeedback(type);
-    onFeedback?.(message.id, type);
-  }, [message.id, onFeedback]);
+CodeBlock.displayName = 'CodeBlock';
 
-  // Enhanced markdown components with better styling
+// OPTIMIZATION: Memoize markdown content
+const MarkdownContent = memo(({ content, messageId }: { content: string; messageId: string }) => {
   const customComponents = {
-    // Code blocks with copy button and language badge
     code({
       inline,
       className,
@@ -72,50 +91,11 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) 
       const match = /language-(\w+)/.exec(className || "");
       const language = match ? match[1] : 'text';
       const code = String(children).replace(/\n$/, "");
-      const blockId = `${message.id}-${language}-${code.substring(0, 20)}`;
 
       if (!inline && code.length > 0) {
-        return (
-          <div className="relative group my-4">
-            {/* Language badge */}
-            <div className="flex items-center justify-between bg-gray-900 px-4 py-2 rounded-t-lg border-b border-gray-700">
-              <span className="text-xs font-mono text-gray-400 uppercase">{language}</span>
-              <button
-                onClick={() => handleCopyCode(code, blockId)}
-                className="flex items-center gap-2 px-2 py-1 text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 rounded transition-colors"
-              >
-                {copiedCode === blockId ? (
-                  <>
-                    <CheckIcon className="w-3.5 h-3.5 text-green-500" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <CopyIcon className="w-3.5 h-3.5" />
-                    <span>Copy code</span>
-                  </>
-                )}
-              </button>
-            </div>
-            
-            {/* Code content */}
-            <div className="overflow-x-auto bg-[#0d1117] rounded-b-lg">
-              <SyntaxHighlighter
-                style={oneDark}
-                language={language}
-                PreTag="div"
-                className="!m-0 !p-4 text-sm leading-relaxed"
-                showLineNumbers={code.split('\n').length > 5}
-                {...props}
-              >
-                {code}
-              </SyntaxHighlighter>
-            </div>
-          </div>
-        );
+        return <CodeBlock language={language} code={code} messageId={messageId} />;
       }
 
-      // Inline code
       return (
         <code
           className="bg-blue-900/30 text-blue-300 rounded px-1.5 py-0.5 text-sm font-mono border border-blue-800/30"
@@ -126,7 +106,6 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) 
       );
     },
 
-    // Enhanced tables
     table: ({ children, ...props }: { children?: React.ReactNode }) => (
       <div className="my-4 overflow-x-auto rounded-lg border border-gray-700">
         <table className="min-w-full divide-y divide-gray-700" {...props}>
@@ -155,7 +134,6 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) 
       </td>
     ),
 
-    // Enhanced lists
     ul: ({ children, ...props }: { children?: React.ReactNode }) => (
       <ul className="my-3 ml-6 space-y-2 list-disc marker:text-blue-400" {...props}>
         {children}
@@ -172,7 +150,6 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) 
       </li>
     ),
 
-    // Enhanced headings
     h1: ({ children, ...props }: { children?: React.ReactNode }) => (
       <h1 className="text-2xl font-bold text-white mt-6 mb-4 pb-2 border-b border-gray-700" {...props}>
         {children}
@@ -189,22 +166,18 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) 
       </h3>
     ),
 
-    
- // Enhanced paragraphs
     p: ({ children, ...props }: { children?: React.ReactNode }) => (
       <div className="text-gray-300 leading-relaxed my-3" {...props}>
         {children}
       </div>
     ),
 
-    // Blockquotes
     blockquote: ({ children, ...props }: { children?: React.ReactNode }) => (
       <blockquote className="border-l-4 border-blue-500 pl-4 py-2 my-4 italic text-gray-400 bg-gray-800/30 rounded-r" {...props}>
         {children}
       </blockquote>
     ),
 
-    // Links
     a: ({ children, href, ...props }: { children?: React.ReactNode; href?: string }) => (
       <a 
         href={href} 
@@ -217,11 +190,54 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) 
       </a>
     ),
 
-    // Horizontal rule
     hr: ({ ...props }) => (
       <hr className="my-6 border-gray-700" {...props} />
     ),
   };
+
+  return (
+    <ReactMarkdown
+      components={customComponents}
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw]}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}, (prev, next) => prev.content === next.content);
+
+MarkdownContent.displayName = 'MarkdownContent';
+
+const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) => {
+  const isUser = message.sender === "user";
+  const [isCopied, setIsCopied] = useState(false);
+  const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null);
+
+  // Extract attachments
+  let promptText = message.text;
+  let attachedFiles: string[] = [];
+  const attachmentRegex = /\[ATTACHMENTS:(.*?)\]/;
+  const match = message.text.match(attachmentRegex);
+
+  if (match && match[1]) {
+    promptText = message.text.replace(attachmentRegex, "").trim();
+    attachedFiles = match[1].split("|||");
+  }
+
+  // Copy entire message
+  const handleCopy = useCallback(() => {
+    const textToCopy = promptText || message.text;
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    });
+  }, [promptText, message.text]);
+
+  // Feedback handler
+  const handleFeedback = useCallback((type: 'positive' | 'negative') => {
+    setFeedback(type);
+    onFeedback?.(message.id, type);
+  }, [message.id, onFeedback]);
 
   return (
     <div
@@ -229,36 +245,26 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) 
         isUser ? "justify-end" : ""
       }`}
     >
-      {/* Bot avatar */}
       {!isUser && (
         <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
           <BotIcon className="w-5 h-5 text-white" />
         </div>
       )}
 
-      {/* Message bubble */}
       <div
         className={`relative w-fit max-w-[90%] md:max-w-2xl lg:max-w-3xl rounded-2xl transition-all ${
-            isUser
-              ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-none shadow-lg"
-              : " text-gray-300 rounded-bl-none"
-          }`}
+          isUser
+            ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-none shadow-lg"
+            : "text-gray-300 rounded-bl-none"
+        }`}
       >
-        {/* Content */}
         <div className={`${isUser ? 'py-0.5 px-4' : 'py-3 px-4'}`}>
           <div className="prose prose-invert max-w-none">
             {promptText && (
-              <ReactMarkdown
-                components={customComponents}
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeRaw]}
-              >
-                {promptText}
-              </ReactMarkdown>
+              <MarkdownContent content={promptText} messageId={message.id} />
             )}
           </div>
 
-          {/* File attachments */}
           {isUser && attachedFiles.length > 0 && (
             <div className="mt-4 pt-3 border-t border-white/20">
               <div className="text-xs text-white/70 mb-2 font-medium">Attached files:</div>
@@ -277,7 +283,6 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) 
           )}
         </div>
 
-        {/* Action buttons for bot messages */}
         {!isUser && (
           <div className="flex items-center gap-1 px-3 pb-3 pt-1">
             <button
@@ -331,7 +336,6 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) 
         )}
       </div>
 
-      {/* User avatar */}
       {isUser && (
         <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-gray-600 to-gray-700 flex items-center justify-center shadow-lg">
           <UserIcon className="w-5 h-5 text-white" />
@@ -341,4 +345,8 @@ const ChatBubble: FC<ChatBubbleProps> = ({ message, onRegenerate, onFeedback }) 
   );
 };
 
-export default ChatBubble;
+// OPTIMIZATION: Memoize entire ChatBubble component
+export default memo(ChatBubble, (prev, next) => {
+  return prev.message.id === next.message.id && 
+         prev.message.text === next.message.text;
+});

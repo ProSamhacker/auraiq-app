@@ -11,50 +11,52 @@ import { adminAuth } from '@/lib/firebase-admin';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { streamText, CoreMessage } from 'ai';
 
+// FIXED: Import Upstash Redis for production-grade rate limiting
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
+
 export const runtime = "nodejs";
-export const maxDuration = 60; // 60 seconds max execution time
+export const maxDuration = 60;
 
-// --- RATE LIMITING ---
-const RATE_LIMIT = {
-  requests: 20, // requests per window
-  windowMs: 60 * 1000, // 1 minute
-};
+// --- PRODUCTION RATE LIMITING WITH REDIS ---
+let ratelimit: Ratelimit | null = null;
 
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+// Initialize Redis if credentials are available
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  const redis = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  });
 
-function checkRateLimit(userId: string): { allowed: boolean; remaining: number } {
-  const now = Date.now();
-  const userLimit = rateLimitStore.get(userId);
-
-  if (!userLimit || now > userLimit.resetAt) {
-    rateLimitStore.set(userId, {
-      count: 1,
-      resetAt: now + RATE_LIMIT.windowMs,
-    });
-    return { allowed: true, remaining: RATE_LIMIT.requests - 1 };
-  }
-
-  if (userLimit.count >= RATE_LIMIT.requests) {
-    return { allowed: false, remaining: 0 };
-  }
-
-  userLimit.count++;
-  return { allowed: true, remaining: RATE_LIMIT.requests - userLimit.count };
+  ratelimit = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(20, '60 s'),
+    analytics: true,
+    prefix: 'auraiq:ratelimit',
+  });
+  
+  console.log('✅ Redis rate limiting initialized');
+} else {
+  console.warn('⚠️ Redis not configured, rate limiting disabled');
 }
 
-// Clean up old rate limit entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [userId, limit] of rateLimitStore.entries()) {
-    if (now > limit.resetAt) {
-      rateLimitStore.delete(userId);
-    }
+async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remaining: number; limit: number }> {
+  if (!ratelimit) {
+    // Fallback: allow all requests if Redis is not configured
+    return { allowed: true, remaining: 20, limit: 20 };
   }
-}, 60 * 1000);
 
-// --- FILE PROCESSING HELPERS (Unchanged) ---
+  const { success, limit, remaining } = await ratelimit.limit(userId);
+  
+  return {
+    allowed: success,
+    remaining,
+    limit,
+  };
+}
 
-// File validation constants
+// --- FILE PROCESSING HELPERS ---
+
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 const MAX_TOTAL_FILES_SIZE = 50 * 1024 * 1024; // 50MB total
 const ALLOWED_FILE_TYPES = [
@@ -72,9 +74,9 @@ const ALLOWED_FILE_TYPES = [
 ];
 
 const isTextBased = (file: File): boolean => {
-  const textMimeTypes = ['text/', 'application/json', 'application/javascript', 'application/xml', 'application/x-python-script', 'application/typescript'];
+  const textMimeTypes = ['text/', 'application/json', 'application/javascript', 'application/xml'];
   return textMimeTypes.some(type => file.type.startsWith(type) || file.type === 'application/octet-stream');
-}
+};
 
 const escapeRegExp = (string: string) => {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -95,6 +97,45 @@ const truncateContent = (content: string, maxTokens: number = 20000): { content:
     content: truncated + '\n\n[... Content truncated due to size. Total size: ~' + estimatedTokens + ' tokens]',
     wasTruncated: true 
   };
+};
+
+// FIXED: Added file content validation
+const validateFileContent = async (file: File): Promise<boolean> => {
+  // Validate PDF magic number
+  if (file.type === 'application/pdf') {
+    const buffer = await file.arrayBuffer();
+    const arr = new Uint8Array(buffer).subarray(0, 5);
+    const header = Array.from(arr).map(b => String.fromCharCode(b)).join('');
+    
+    if (!header.startsWith('%PDF')) {
+      throw new Error('Invalid PDF file - file header does not match PDF format');
+    }
+  }
+  
+  // Validate image files
+  if (file.type.startsWith('image/')) {
+    const buffer = await file.arrayBuffer();
+    const arr = new Uint8Array(buffer).subarray(0, 4);
+    
+    // Check common image signatures
+    const signatures: { [key: string]: number[] } = {
+      'image/jpeg': [0xFF, 0xD8, 0xFF],
+      'image/png': [0x89, 0x50, 0x4E, 0x47],
+      'image/gif': [0x47, 0x49, 0x46],
+      'image/webp': [0x52, 0x49, 0x46, 0x46],
+    };
+    
+    const expectedSig = signatures[file.type];
+    if (expectedSig) {
+      for (let i = 0; i < expectedSig.length; i++) {
+        if (arr[i] !== expectedSig[i]) {
+          throw new Error(`Invalid ${file.type} file - file signature does not match`);
+        }
+      }
+    }
+  }
+  
+  return true;
 };
 
 async function extractPPTXImages(buffer: Buffer): Promise<{ imageUrls: string[], text: string }> {
@@ -167,10 +208,32 @@ async function extractPDFContent(buffer: Uint8Array): Promise<{ imageUrls: strin
   return { imageUrls, text };
 }
 
+// FIXED: Add CSRF protection
+function validateOrigin(request: NextRequest): boolean {
+  const origin = request.headers.get('origin');
+  const host = request.headers.get('host');
+  
+  if (!origin) return true; // Allow same-origin requests
+  
+  // In production, validate against allowed origins
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
+  if (allowedOrigins.length > 0) {
+    return allowedOrigins.some(allowed => origin.includes(allowed));
+  }
+  
+  // Fallback: check if origin matches host
+  return origin.includes(host || '');
+}
+
 // --- MAIN HANDLER ---
 
 export async function POST(req: NextRequest) {
   try {
+    // FIXED: CSRF Protection
+    if (!validateOrigin(req)) {
+      return NextResponse.json({ error: 'Invalid origin' }, { status: 403 });
+    }
+
     // 1. AUTHENTICATION CHECK
     const authToken = req.headers.get('Authorization')?.split('Bearer ')[1];
     if (!authToken) {
@@ -187,15 +250,15 @@ export async function POST(req: NextRequest) {
 
     const userId = decodedToken.uid;
 
-    // 2. RATE LIMITING CHECK
-    const rateCheck = checkRateLimit(userId);
+    // 2. FIXED: PRODUCTION RATE LIMITING
+    const rateCheck = await checkRateLimit(userId);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { error: 'Rate limit exceeded. Please try again later.' },
         { 
           status: 429,
           headers: {
-            'X-RateLimit-Limit': RATE_LIMIT.requests.toString(),
+            'X-RateLimit-Limit': rateCheck.limit.toString(),
             'X-RateLimit-Remaining': '0',
             'Retry-After': '60',
           }
@@ -213,24 +276,44 @@ export async function POST(req: NextRequest) {
     const files = formData.getAll('files') as File[];
     const contextFileUrlsString = formData.get('contextFileUrls') as string;
 
-    // 4. FILE VALIDATION
+    // 4. FIXED: ENHANCED FILE VALIDATION
     let totalFileSize = 0;
+    
     for (const file of files) {
+      // First check size
       if (file.size > MAX_FILE_SIZE) {
-        return NextResponse.json({ error: `File "${file.name}" exceeds maximum size of 25MB` }, { status: 413 });
+        return NextResponse.json({ 
+          error: `File "${file.name}" exceeds maximum size of 25MB` 
+        }, { status: 413 });
       }
+      
       totalFileSize += file.size;
+      
+      // Then check type
       if (!ALLOWED_FILE_TYPES.includes(file.type) && !file.type.startsWith('image/') && !isTextBased(file)) {
-        return NextResponse.json({ error: `File type "${file.type}" is not supported` }, { status: 400 });
+        return NextResponse.json({ 
+          error: `File type "${file.type}" is not supported` 
+        }, { status: 400 });
+      }
+      
+      // FIXED: Validate file content
+      try {
+        await validateFileContent(file);
+      } catch (error) {
+        return NextResponse.json({ 
+          error: `File validation failed: ${(error as Error).message}` 
+        }, { status: 400 });
       }
     }
+    
     if (totalFileSize > MAX_TOTAL_FILES_SIZE) {
-      return NextResponse.json({ error: `Total file size exceeds maximum of 50MB` }, { status: 413 });
+      return NextResponse.json({ 
+        error: `Total file size exceeds maximum of 50MB` 
+      }, { status: 413 });
     }
 
     // 5. PROCESS CONTENT
     let textContent = input;
-    // Vercel AI SDK 'google' provider expects images as URLs or Base64. We collect URLs.
     const imageUrls: string[] = []; 
     let hasImage = false;
 
@@ -312,31 +395,27 @@ export async function POST(req: NextRequest) {
           const blob = await put(uniqueFilename, file, { access: 'public' });
           imageUrls.push(blob.url);
         } else if (file.type === 'application/pdf') {
-            const buffer = await file.arrayBuffer();
-            const { imageUrls: pdfImages, text } = await extractPDFContent(new Uint8Array(buffer));
-            if(text) textContent += `\n\n--- File: ${file.name} ---\n${text}\n--- End ---\n`;
-            if(pdfImages.length > 0) { hasImage = true; imageUrls.push(...pdfImages); }
+          const buffer = await file.arrayBuffer();
+          const { imageUrls: pdfImages, text } = await extractPDFContent(new Uint8Array(buffer));
+          if(text) textContent += `\n\n--- File: ${file.name} ---\n${text}\n--- End ---\n`;
+          if(pdfImages.length > 0) { hasImage = true; imageUrls.push(...pdfImages); }
         } else if (isTextBased(file)) {
-            const text = await file.text();
-            textContent += `\n\n--- File: ${file.name} ---\n${text}\n--- End ---\n`;
+          const text = await file.text();
+          textContent += `\n\n--- File: ${file.name} ---\n${text}\n--- End ---\n`;
         }
-        // Add other document parsers (DOCX, PPTX) if uploaded directly here
       });
       await Promise.all(filePromises);
     }
 
     if (!textContent.trim() && imageUrls.length === 0) {
-        return NextResponse.json({ error: "Input is empty." }, { status: 400 });
+      return NextResponse.json({ error: "Input is empty." }, { status: 400 });
     }
 
     // 6. SETUP GOOGLE AI PROVIDERS & MODEL SELECTION
-    
-    // Initialize provider for "Daily" tasks (Faster/Cheaper)
     const googleDaily = createGoogleGenerativeAI({
       apiKey: process.env.GEMINI_API_KEY_DAILY,
     });
 
-    // Initialize provider for "Complex" tasks (Coding/Vision/Reasoning)
     const googleComplex = createGoogleGenerativeAI({
       apiKey: process.env.GEMINI_API_KEY_COMPLEX,
     });
@@ -346,19 +425,15 @@ export async function POST(req: NextRequest) {
     const isCodingRequest = codingKeywords.some(keyword => new RegExp(`\\b${escapeRegExp(keyword)}\\b`, 'i').test(textContent));
 
     if (hasImage) {
-        // Images require the Pro model (Multimodal)
-        selectedModel = googleComplex('gemini-2.5-pro');
+      selectedModel = googleComplex('gemini-2.5-pro');
     } else if (taskType === 'coding' || isCodingRequest) {
-        // Coding requires better reasoning
-        selectedModel = googleComplex('gemini-2.5-pro');
+      selectedModel = googleComplex('gemini-2.5-pro');
     } else if (taskType === 'daily') {
-        // Daily tasks use Flash
-        selectedModel = googleDaily('gemini-2.5-flash');
+      selectedModel = googleDaily('gemini-2.5-flash');
     } else {
-        // Fallback auto-detect
-        selectedModel = isCodingRequest 
-            ? googleComplex('gemini-2.5-pro') 
-            : googleDaily('gemini-2.5-flash');
+      selectedModel = isCodingRequest 
+        ? googleComplex('gemini-2.5-pro') 
+        : googleDaily('gemini-2.5-flash');
     }
 
     // 7. PREPARE MESSAGES
@@ -377,10 +452,9 @@ export async function POST(req: NextRequest) {
       content: msg.text
     }));
 
-    // Construct user content (Text + Images)
     const userContent: any[] = [{ type: 'text', text: textContent }];
     imageUrls.forEach(url => {
-        userContent.push({ type: 'image', image: url });
+      userContent.push({ type: 'image', image: url });
     });
 
     const messages: CoreMessage[] = [
@@ -395,14 +469,12 @@ export async function POST(req: NextRequest) {
       messages: messages,
     });
 
-    // 9. TRANSFORM STREAM TO FRONTEND-COMPATIBLE SSE
-    // The frontend expects OpenAI-style "data: { choices: [...] }" chunks.
+    // 9. TRANSFORM STREAM
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
         try {
           for await (const chunk of result.textStream) {
-            // Mimic OpenAI chunk format for compatibility with useStreamingChat.ts
             const payload = {
               choices: [{ delta: { content: chunk } }]
             };
@@ -420,8 +492,10 @@ export async function POST(req: NextRequest) {
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream; charset=utf-8',
-        'X-RateLimit-Limit': RATE_LIMIT.requests.toString(),
+        'X-RateLimit-Limit': rateCheck.limit.toString(),
         'X-RateLimit-Remaining': rateCheck.remaining.toString(),
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
       }
     });
 

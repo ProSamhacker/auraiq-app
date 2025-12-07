@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, FC, FormEvent, useEffect, useRef } from 'react';
+import { useState, FC, FormEvent, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, Auth, signOut } from 'firebase/auth';
 import { Firestore, collection, addDoc, doc, deleteDoc, updateDoc, getDocs } from 'firebase/firestore';
 import { Message } from '../lib/types';
@@ -17,18 +17,15 @@ import ContextPanel from './ContextPanel';
 import ChatBubble from './ChatBubble';
 import { BrainCircuit, Loader2 } from 'lucide-react';
 import { MenuIcon, UserIcon, LogoutIcon, BotIcon } from './Icons';
+import ErrorBoundary from './ErrorBoundary';
 
-// --- COMPONENTS ---
+// --- OPTIMIZED COMPONENTS ---
 
-// 1. Polished Typing Indicator (Matches ChatBubble style)
 export const TypingIndicator = () => (
   <div className="flex items-start gap-3 my-4 fade-in">
-    {/* Bot Avatar */}
     <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
       <BotIcon className="w-5 h-5 text-white" />
     </div>
-    
-    {/* Animated Dots Bubble */}
     <div className="flex items-center gap-1.5 bg-gray-800/80 border border-gray-700/50 backdrop-blur-sm rounded-2xl rounded-tl-none px-5 py-4 shadow-sm">
       <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDuration: '1s', animationDelay: '0ms' }} />
       <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDuration: '1s', animationDelay: '0.2s' }} />
@@ -38,7 +35,7 @@ export const TypingIndicator = () => (
 );
 
 export const useSmoothScroll = () => {
-  const scrollToBottom = (smooth = true) => {
+  const scrollToBottom = useCallback((smooth = true) => {
     const container = document.getElementById('chat-container');
     if (container) {
       container.scrollTo({
@@ -46,26 +43,22 @@ export const useSmoothScroll = () => {
         behavior: smooth ? 'smooth' : 'auto'
       });
     }
-  };
+  }, []);
+  
   return { scrollToBottom };
 };
 
 export const useMobileKeyboard = () => {
   useEffect(() => {
     const handleResize = () => {
-      const viewport = window.visualViewport;
-      if (viewport) {
-        const isKeyboardOpen = viewport.height < window.innerHeight * 0.75;
-        if (isKeyboardOpen) {
-          document.documentElement.style.setProperty('--keyboard-height', 
-            `${window.innerHeight - viewport.height}px`);
-        } else {
-          document.documentElement.style.setProperty('--keyboard-height', '0px');
-        }
-      }
+      const vh = window.visualViewport?.height || window.innerHeight;
+      document.documentElement.style.setProperty('--vh', `${vh * 0.01}px`);
     };
+
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', handleResize);
+      handleResize();
+      
       return () => {
         window.visualViewport?.removeEventListener('resize', handleResize);
       };
@@ -139,7 +132,9 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const finalStreamingMessage = useRef<Message | null>(null);
+  
+  // FIXED: Store chat ID with streaming message to prevent race conditions
+  const streamingMessageRef = useRef<{ message: Message; chatId: string } | null>(null);
 
   const { scrollToBottom } = useSmoothScroll();
   useMobileKeyboard();
@@ -148,41 +143,41 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     scrollToBottom();
   }, [messages, streamingMessage, scrollToBottom]);
 
-  useEffect(() => {
-    if (streamingMessage) {
-      finalStreamingMessage.current = streamingMessage;
-    }
-  }, [streamingMessage]);
-
+  // FIXED: Save final streaming message with correct chat ID
   useEffect(() => {
     const saveFinalMessage = async () => {
-      if (!isLoading && finalStreamingMessage.current && currentChatId) {
-        const finalMessage = finalStreamingMessage.current;
-        if (finalMessage.text.trim()) {
+      if (!isLoading && streamingMessageRef.current) {
+        const { message: finalMessage, chatId: targetChatId } = streamingMessageRef.current;
+        
+        if (finalMessage.text.trim() && targetChatId) {
           try {
-            await addMessage(db, user.uid, currentChatId, finalMessage);
+            await addMessage(db, user.uid, targetChatId, finalMessage);
+            console.log('Saved final message to chat:', targetChatId);
           } catch (error) {
             console.error('Error saving final message:', error);
+            // TODO: Implement retry logic
           }
         }
+        
         setStreamingMessage(null);
-        finalStreamingMessage.current = null;
+        streamingMessageRef.current = null;
       }
     };
+    
     saveFinalMessage();
-  }, [isLoading, currentChatId, user.uid, db]);
+  }, [isLoading, user.uid, db]);
 
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     createNewChat();
     setIsSlideoutOpen(false);
-  };
+  }, [createNewChat]);
 
-  const handleSelectChat = (id: string) => {
+  const handleSelectChat = useCallback((id: string) => {
     setCurrentChatId(id);
     setIsSlideoutOpen(false);
-  };
+  }, [setCurrentChatId]);
 
-  const handleDeleteChat = async (chatId: string) => {
+  const handleDeleteChat = useCallback(async (chatId: string) => {
     if (!chatId) return;
     try {
       const messagesRef = collection(db, 'users', user.uid, 'chats', chatId, 'messages');
@@ -217,22 +212,22 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     } catch (error) {
       console.error("Error deleting chat:", error);
     }
-  };
+  }, [db, user.uid, currentChatId, setCurrentChatId]);
 
-  const handleRenameChat = async (chatId: string, newTitle: string) => {
+  const handleRenameChat = useCallback(async (chatId: string, newTitle: string) => {
     if (!chatId || !newTitle.trim()) return;
     const chatRef = doc(db, 'users', user.uid, 'chats', chatId);
     await updateDoc(chatRef, { title: newTitle.trim() });
-  };
+  }, [db, user.uid]);
   
-  const handleStopGenerating = () => {
+  const handleStopGenerating = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = useCallback(async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     try {
@@ -250,9 +245,9 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       console.error('Upload error:', error);
       alert((error as Error).message);
     }
-  };
+  }, [user]);
 
-  const handleFileDelete = async (fileId: string) => {
+  const handleFileDelete = useCallback(async (fileId: string) => {
     try {
       const token = await user.getIdToken();
       const response = await fetch('/api/context/delete', {
@@ -271,15 +266,15 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       console.error('Delete error:', error);
       alert((error as Error).message);
     }
-  };
+  }, [user]);
   
-  const handlePromptClick = (prompt: { title: string }) => {
+  const handlePromptClick = useCallback((prompt: { title: string }) => {
     setInput(prompt.title);
     const textarea = document.querySelector('textarea');
     if (textarea) textarea.focus();
-  };
+  }, []);
 
-  const handleSendMessage = async (e: FormEvent, taskType: 'auto' | 'daily' | 'coding') => {
+  const handleSendMessage = useCallback(async (e: FormEvent, taskType: 'auto' | 'daily' | 'coding') => {
     e.preventDefault();
     if ((!input.trim() && attachments.length === 0) || isLoading) return;
 
@@ -299,13 +294,11 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const tempInput = input;
     const tempAttachments = attachments;
 
-    // 1. Update UI immediately
     setMessages(prev => [...prev, userMessage]);
     setInput("");
     setAttachments([]);
     setIsLoading(true);
 
-    // 2. Set thinking state immediately (id uses future time to avoid collision)
     const aiMessageId = (Date.now() + 1000).toString();
     setStreamingMessage({ id: aiMessageId, text: "", sender: "ai" });
 
@@ -372,6 +365,10 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullText = '';
+      
+      // OPTIMIZATION: Debounced updates
+      let updateTimer: NodeJS.Timeout | null = null;
+      const DEBOUNCE_MS = 50;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -390,8 +387,12 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
               const delta = parsed.choices?.[0]?.delta?.content;
               if (delta) {
                 fullText += delta;
-                // Update stream with accumulated text
-                setStreamingMessage({ id: aiMessageId, text: fullText, sender: "ai" });
+                
+                // Debounce state updates
+                if (updateTimer) clearTimeout(updateTimer);
+                updateTimer = setTimeout(() => {
+                  setStreamingMessage({ id: aiMessageId, text: fullText, sender: "ai" });
+                }, DEBOUNCE_MS);
               }
             } catch {
               // Ignore parse errors
@@ -399,6 +400,18 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
           }
         }
       }
+
+      // Clear any pending timer and do final update
+      if (updateTimer) clearTimeout(updateTimer);
+      
+      const finalMessage = { id: aiMessageId, text: fullText, sender: "ai" as const };
+      setStreamingMessage(finalMessage);
+      
+      // FIXED: Store with chat ID to prevent race condition
+      streamingMessageRef.current = { 
+        message: finalMessage, 
+        chatId: tempChatId 
+      };
 
     } catch (error) {
       const err = error as Error;
@@ -408,17 +421,35 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       } else {
         console.error("API call failed:", err);
         const errorMessageText = err.message || "An unknown error occurred";
-        setStreamingMessage({
+        const errorMessage = {
           id: (Date.now() + 2).toString(),
           text: `Error: ${errorMessageText}`,
-          sender: "ai"
-        });
+          sender: "ai" as const
+        };
+        setStreamingMessage(errorMessage);
+        
+        // Also store error message for saving
+        if (tempChatId) {
+          streamingMessageRef.current = { 
+            message: errorMessage, 
+            chatId: tempChatId 
+          };
+        }
       }
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  };
+  }, [input, attachments, isLoading, currentChatId, db, user, context, isContextActive, contextFiles, messages, setMessages, setCurrentChatId]);
+
+  // Memoize message list to prevent unnecessary re-renders
+  const messageList = useMemo(() => (
+    messages.map(msg => (
+      <ErrorBoundary key={msg.id}>
+        <ChatBubble message={msg} />
+      </ErrorBoundary>
+    ))
+  ), [messages]);
 
   return (
     <div className="chat-container flex h-screen w-full bg-[#131314] text-white overflow-hidden">
@@ -505,17 +536,13 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
               <EmptyState userName={user.email} handlePromptClick={handlePromptClick} />
             ) : (
               <>
-                {messages.map(msg => (
-                  <ChatBubble key={msg.id} message={msg} />
-                ))}
+                {messageList}
 
-                {/* VISUAL LOGIC:
-                    1. streamingMessage exists AND has text -> Show ChatBubble (streaming content)
-                    2. streamingMessage exists AND no text -> Show TypingIndicator (thinking phase)
-                */}
                 {streamingMessage && (
                   streamingMessage.text ? (
-                    <ChatBubble message={streamingMessage} />
+                    <ErrorBoundary>
+                      <ChatBubble message={streamingMessage} />
+                    </ErrorBoundary>
                   ) : (
                     <TypingIndicator />
                   )
