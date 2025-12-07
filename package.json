@@ -1,12 +1,13 @@
 {
-  "name": "your-ai-app",
+  "name": "auraiq-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.32",
@@ -22,7 +23,7 @@
     "latest": "^0.2.0",
     "lucide-react": "^0.544.0",
     "mammoth": "^1.11.0",
-    "next": "15.5.4",
+    "next": "^16.0.7",
     "openai": "^6.1.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -46,7 +47,7 @@
     "@types/xlsx": "^0.0.35",
     "autoprefixer": "^10.4.21",
     "eslint": "^9",
-    "eslint-config-next": "15.5.4",
+    "eslint-config-next": "^16.0.7",
     "globals": "^16.5.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.14",
