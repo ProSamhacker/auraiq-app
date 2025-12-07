@@ -14,11 +14,28 @@ export default function Home() {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   useEffect(() => {
+    // 1. Set up the Firebase listener
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log("Auth state changed:", user ? "Logged in" : "Logged out");
       setUser(user);
       setIsAuthLoading(false);
     });
-    return () => unsubscribe();
+
+    // 2. Add a fallback timeout (e.g., 4 seconds)
+    const timeoutId = setTimeout(() => {
+      setIsAuthLoading((isLoading) => {
+        if (isLoading) {
+          console.warn("Auth listener timed out - forcing load");
+          return false; 
+        }
+        return isLoading;
+      });
+    }, 4000);
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   if (isAuthLoading) {

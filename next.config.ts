@@ -1,5 +1,3 @@
-// next.config.ts
-
 import type { NextConfig } from 'next';
 import withPWAInit from '@ducanh2912/next-pwa';
 
@@ -10,9 +8,9 @@ const nextConfig: NextConfig = {
         source: '/:path*',
         headers: [
           {
-            // CHANGE THIS LINE:
             key: 'Cross-Origin-Opener-Policy',
-            value: 'same-origin-allow-popups', // Changed from 'same-origin'
+            // CHANGE THIS VALUE:
+            value: 'same-origin-allow-popups', 
           },
           {
             key: 'Cross-Origin-Embedder-Policy',
