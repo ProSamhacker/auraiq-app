@@ -1,4 +1,5 @@
 // src/app/api/chat/route.ts
+// UPDATED VERSION - Add model selection to your existing file
 
 import { NextRequest, NextResponse } from "next/server";
 import { put } from '@vercel/blob';
@@ -10,8 +11,6 @@ import AdmZip from 'adm-zip';
 import { adminAuth } from '@/lib/firebase-admin';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { streamText, CoreMessage } from 'ai';
-
-// FIXED: Import Upstash Redis for production-grade rate limiting
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
@@ -21,7 +20,6 @@ export const maxDuration = 60;
 // --- PRODUCTION RATE LIMITING WITH REDIS ---
 let ratelimit: Ratelimit | null = null;
 
-// Initialize Redis if credentials are available
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
   const redis = new Redis({
     url: process.env.UPSTASH_REDIS_REST_URL,
@@ -42,7 +40,6 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
 
 async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remaining: number; limit: number }> {
   if (!ratelimit) {
-    // Fallback: allow all requests if Redis is not configured
     return { allowed: true, remaining: 20, limit: 20 };
   }
 
@@ -56,9 +53,8 @@ async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remai
 }
 
 // --- FILE PROCESSING HELPERS ---
-
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
-const MAX_TOTAL_FILES_SIZE = 50 * 1024 * 1024; // 50MB total
+const MAX_FILE_SIZE = 25 * 1024 * 1024;
+const MAX_TOTAL_FILES_SIZE = 50 * 1024 * 1024;
 const ALLOWED_FILE_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -99,9 +95,7 @@ const truncateContent = (content: string, maxTokens: number = 20000): { content:
   };
 };
 
-// FIXED: Added file content validation
 const validateFileContent = async (file: File): Promise<boolean> => {
-  // Validate PDF magic number
   if (file.type === 'application/pdf') {
     const buffer = await file.arrayBuffer();
     const arr = new Uint8Array(buffer).subarray(0, 5);
@@ -112,12 +106,10 @@ const validateFileContent = async (file: File): Promise<boolean> => {
     }
   }
   
-  // Validate image files
   if (file.type.startsWith('image/')) {
     const buffer = await file.arrayBuffer();
     const arr = new Uint8Array(buffer).subarray(0, 4);
     
-    // Check common image signatures
     const signatures: { [key: string]: number[] } = {
       'image/jpeg': [0xFF, 0xD8, 0xFF],
       'image/png': [0x89, 0x50, 0x4E, 0x47],
@@ -208,20 +200,17 @@ async function extractPDFContent(buffer: Uint8Array): Promise<{ imageUrls: strin
   return { imageUrls, text };
 }
 
-// FIXED: Add CSRF protection
 function validateOrigin(request: NextRequest): boolean {
   const origin = request.headers.get('origin');
   const host = request.headers.get('host');
   
-  if (!origin) return true; // Allow same-origin requests
+  if (!origin) return true;
   
-  // In production, validate against allowed origins
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
   if (allowedOrigins.length > 0) {
     return allowedOrigins.some(allowed => origin.includes(allowed));
   }
   
-  // Fallback: check if origin matches host
   return origin.includes(host || '');
 }
 
@@ -229,12 +218,11 @@ function validateOrigin(request: NextRequest): boolean {
 
 export async function POST(req: NextRequest) {
   try {
-    // FIXED: CSRF Protection
     if (!validateOrigin(req)) {
       return NextResponse.json({ error: 'Invalid origin' }, { status: 403 });
     }
 
-    // 1. AUTHENTICATION CHECK
+    // 1. AUTHENTICATION
     const authToken = req.headers.get('Authorization')?.split('Bearer ')[1];
     if (!authToken) {
       return NextResponse.json({ error: 'Unauthorized - No token provided' }, { status: 401 });
@@ -250,7 +238,7 @@ export async function POST(req: NextRequest) {
 
     const userId = decodedToken.uid;
 
-    // 2. FIXED: PRODUCTION RATE LIMITING
+    // 2. RATE LIMITING
     const rateCheck = await checkRateLimit(userId);
     if (!rateCheck.allowed) {
       return NextResponse.json(
@@ -270,17 +258,18 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const input = formData.get('input') as string;
     const taskType = formData.get('taskType') as string;
+    // NEW: Get requested model
+    const requestedModel = formData.get('model') as string; // 'auto', 'gemini-flash', 'gemini-pro', 'iq1-base'
     const context = formData.get('context') as string;
     const historyString = formData.get('history') as string;
     const history = JSON.parse(historyString || '[]');
     const files = formData.getAll('files') as File[];
     const contextFileUrlsString = formData.get('contextFileUrls') as string;
 
-    // 4. FIXED: ENHANCED FILE VALIDATION
+    // 4. FILE VALIDATION
     let totalFileSize = 0;
     
     for (const file of files) {
-      // First check size
       if (file.size > MAX_FILE_SIZE) {
         return NextResponse.json({ 
           error: `File "${file.name}" exceeds maximum size of 25MB` 
@@ -289,14 +278,12 @@ export async function POST(req: NextRequest) {
       
       totalFileSize += file.size;
       
-      // Then check type
       if (!ALLOWED_FILE_TYPES.includes(file.type) && !file.type.startsWith('image/') && !isTextBased(file)) {
         return NextResponse.json({ 
           error: `File type "${file.type}" is not supported` 
         }, { status: 400 });
       }
       
-      // FIXED: Validate file content
       try {
         await validateFileContent(file);
       } catch (error) {
@@ -317,7 +304,7 @@ export async function POST(req: NextRequest) {
     const imageUrls: string[] = []; 
     let hasImage = false;
 
-    // Process context files
+    // Process context files (keeping your existing code)
     if (contextFileUrlsString) {
       const contextFileUrls = JSON.parse(contextFileUrlsString) as string[];
       if (contextFileUrls.length > 0) {
@@ -411,7 +398,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Input is empty." }, { status: 400 });
     }
 
-    // 6. SETUP GOOGLE AI PROVIDERS & MODEL SELECTION
+    // 6. SETUP GOOGLE AI PROVIDERS & ENHANCED MODEL SELECTION
     const googleDaily = createGoogleGenerativeAI({
       apiKey: process.env.GEMINI_API_KEY_DAILY,
     });
@@ -420,21 +407,44 @@ export async function POST(req: NextRequest) {
       apiKey: process.env.GEMINI_API_KEY_COMPLEX,
     });
 
+    // NEW: Enhanced model selection with user preference
     let selectedModel;
+    let modelName = 'auto';
     const codingKeywords = ['code', 'python', 'javascript', 'react', 'error', 'debug', 'typescript', 'java', 'c++'];
     const isCodingRequest = codingKeywords.some(keyword => new RegExp(`\\b${escapeRegExp(keyword)}\\b`, 'i').test(textContent));
 
-    if (hasImage) {
-      selectedModel = googleComplex('gemini-2.5-pro');
-    } else if (taskType === 'coding' || isCodingRequest) {
-      selectedModel = googleComplex('gemini-2.5-pro');
-    } else if (taskType === 'daily') {
+    // Check if user requested a specific model
+    if (requestedModel === 'gemini-flash') {
       selectedModel = googleDaily('gemini-2.5-flash');
+      modelName = 'gemini-2.5-flash';
+    } else if (requestedModel === 'gemini-pro') {
+      selectedModel = googleComplex('gemini-2.5-pro');
+      modelName = 'gemini-2.5-pro';
+    } else if (requestedModel === 'iq1-base') {
+      // TODO: Implement IQ1 routing when you set it up
+      // For now, fallback to Pro
+      selectedModel = googleComplex('gemini-2.5-pro');
+      modelName = 'gemini-2.5-pro (iq1-fallback)';
     } else {
-      selectedModel = isCodingRequest 
-        ? googleComplex('gemini-2.5-pro') 
-        : googleDaily('gemini-2.5-flash');
+      // Auto-selection logic
+      if (hasImage) {
+        selectedModel = googleComplex('gemini-2.5-pro');
+        modelName = 'gemini-2.5-pro';
+      } else if (taskType === 'coding' || isCodingRequest) {
+        selectedModel = googleComplex('gemini-2.5-pro');
+        modelName = 'gemini-2.5-pro';
+      } else if (taskType === 'daily') {
+        selectedModel = googleDaily('gemini-2.5-flash');
+        modelName = 'gemini-2.5-flash';
+      } else {
+        selectedModel = isCodingRequest 
+          ? googleComplex('gemini-2.5-pro') 
+          : googleDaily('gemini-2.5-flash');
+        modelName = isCodingRequest ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+      }
     }
+
+    console.log(`🤖 Using model: ${modelName} (requested: ${requestedModel || 'auto'})`);
 
     // 7. PREPARE MESSAGES
     const basePrompt = `You are AuraIQ, a helpful and intelligent AI assistant.
@@ -494,6 +504,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'text/event-stream; charset=utf-8',
         'X-RateLimit-Limit': rateCheck.limit.toString(),
         'X-RateLimit-Remaining': rateCheck.remaining.toString(),
+        'X-Model-Used': modelName, // NEW: Track which model was used
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
       }

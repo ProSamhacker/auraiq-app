@@ -9,9 +9,8 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
-  onAuthStateChanged,
 } from "firebase/auth";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 
 interface AuthComponentProps {
   auth: Auth;
@@ -23,39 +22,46 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [authMethod, setAuthMethod] = useState<'popup' | 'redirect'>('popup');
 
-  // Check if we're in an iframe
-  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
-
-  // Handle redirect result on component mount
+  // FIXED: Better redirect result handling
   useEffect(() => {
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result) {
-          console.log("Redirect sign-in successful:", result.user.email);
+    let isMounted = true;
+    
+    const handleRedirect = async () => {
+      try {
+        setIsLoading(true);
+        const result = await getRedirectResult(auth);
+        
+        if (result && isMounted) {
+          console.log("✅ Redirect sign-in successful:", result.user.email);
+          // User will be automatically redirected by onAuthStateChanged
         }
-      })
-      .catch((err) => {
-        const errorMessage = err instanceof Error ? err.message : "An unknown error occurred during sign-in redirect.";
-        setError(errorMessage.replace("Firebase: ", ""));
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setIsLoading(false);
-      } else if (!user) {
-        setIsLoading(false);
+      } catch (err: any) {
+        if (isMounted) {
+          console.error("❌ Redirect error:", err);
+          setError(err.message?.replace("Firebase: ", "") || "Sign-in failed");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
-    });
+    };
 
-    return () => unsubscribe();
+    handleRedirect();
+
+    return () => {
+      isMounted = false;
+    };
   }, [auth]);
 
-  // Email/Password Form Submission
+  // Detect environment
+  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+  const isMobile = typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  // Email/Password Authentication
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
@@ -73,9 +79,9 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
       } else {
         await createUserWithEmailAndPassword(auth, email, password);
       }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
-      setError(errorMessage.replace("Firebase: ", ""));
+    } catch (err: any) {
+      console.error("Auth error:", err);
+      setError(err.message?.replace("Firebase: ", "") || "Authentication failed");
     } finally {
       setIsLoading(false);
     }
@@ -89,39 +95,66 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({
-        prompt: 'select_account'
+        prompt: 'select_account',
+        // FIXED: Add these for better reliability
+        display: 'popup',
       });
 
-      // Use popup for iframe contexts, redirect for standalone
+      // FIXED: Better method detection
+      let shouldUsePopup = true;
+      
       if (isInIframe) {
-        console.log("Detected iframe context, using popup authentication");
+        // Always use popup in iframe
+        shouldUsePopup = true;
+        console.log("🔧 Using popup (iframe detected)");
+      } else if (isMobile) {
+        // Use redirect on mobile for better UX
+        shouldUsePopup = false;
+        console.log("🔧 Using redirect (mobile detected)");
+      }
+
+      if (shouldUsePopup) {
         try {
-          await signInWithPopup(auth, provider);
+          const result = await signInWithPopup(auth, provider);
+          console.log("✅ Popup sign-in successful:", result.user.email);
         } catch (popupError: any) {
-          // If popup is blocked, inform user
+          console.error("❌ Popup error:", popupError);
+          
+          // Handle specific popup errors
           if (popupError.code === 'auth/popup-blocked') {
-            setError("Popup blocked. Please allow popups for this site and try again.");
+            setError("Popup blocked. Please allow popups and try again, or use email sign-in.");
           } else if (popupError.code === 'auth/popup-closed-by-user') {
-            setError("Sign-in cancelled. Please try again.");
+            setError("Sign-in cancelled.");
+          } else if (popupError.code === 'auth/cancelled-popup-request') {
+            // User opened multiple popups, ignore this error
+            console.log("Multiple popups detected, ignoring...");
           } else {
-            throw popupError;
+            // Try redirect as fallback
+            console.log("🔄 Falling back to redirect...");
+            await signInWithRedirect(auth, provider);
           }
         }
       } else {
-        console.log("Using redirect authentication");
+        // Use redirect
         await signInWithRedirect(auth, provider);
+        // Don't set loading to false - redirect will happen
+        return;
       }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
-      setError(errorMessage.replace("Firebase: ", ""));
+    } catch (err: any) {
+      console.error("❌ Google auth error:", err);
+      setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed");
+    } finally {
       setIsLoading(false);
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !error) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-900">
-        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">Signing you in...</p>
+        </div>
       </div>
     );
   }
@@ -130,9 +163,25 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
     <div className="flex items-center justify-center h-full min-h-screen bg-gray-900">
       <div className="w-full max-w-md p-8 space-y-8 bg-gray-800 rounded-xl shadow-lg">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-white">AuraIQ</h1>
-          <p className="text-gray-400">Your intelligent assistant awaits.</p>
+          <h1 className="text-4xl font-bold text-white mb-2">AuraIQ</h1>
+          <p className="text-gray-400">Your intelligent assistant awaits</p>
         </div>
+        
+        {/* Error Display */}
+        {error && (
+          <div className="p-4 bg-red-900/30 border border-red-700/50 rounded-lg flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-200">{error}</p>
+              <button
+                onClick={() => setError("")}
+                className="text-xs text-red-400 hover:text-red-300 underline mt-1"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
         
         {/* Email/Password Form */}
         <form className="space-y-6" onSubmit={handleSubmit}>
@@ -142,7 +191,8 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full px-4 py-2 text-gray-200 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={isLoading}
+            className="w-full px-4 py-3 text-gray-200 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-all"
           />
           <input
             type="password"
@@ -150,7 +200,8 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            className="w-full px-4 py-2 text-gray-200 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={isLoading}
+            className="w-full px-4 py-3 text-gray-200 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-all"
           />
           {!isLogin && (
             <input
@@ -159,18 +210,24 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="w-full px-4 py-2 text-gray-200 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={isLoading}
+              className="w-full px-4 py-3 text-gray-200 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-all"
             />
           )}
-          
-          {error && <p className="text-sm text-red-400 text-center">{error}</p>}
           
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full px-4 py-2 font-bold text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-600 transition-colors"
+            className="w-full px-4 py-3 font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
-            {isLogin ? "Login" : "Sign Up"}
+            {isLoading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              isLogin ? "Login" : "Sign Up"
+            )}
           </button>
         </form>
 
@@ -189,7 +246,7 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
           type="button"
           onClick={handleGoogleLogin}
           disabled={isLoading}
-          className="w-full flex items-center justify-center gap-3 px-4 py-2 bg-white text-gray-900 font-semibold rounded-md hover:bg-gray-100 transition-colors disabled:opacity-70"
+          className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white text-gray-900 font-semibold rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
@@ -209,15 +266,18 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
             />
           </svg>
-          Google
+          {isLoading ? "Signing in..." : "Google"}
         </button>
 
-        {isInIframe && (
-          <p className="text-xs text-center text-yellow-400">
-            ℹ️ Embedded mode detected - using popup authentication
-          </p>
+        {/* Environment Info */}
+        {(isInIframe || isMobile) && (
+          <div className="text-xs text-center text-gray-500">
+            {isInIframe && "🔧 Embedded mode - using popup auth"}
+            {isMobile && !isInIframe && "📱 Mobile detected - optimized flow"}
+          </div>
         )}
 
+        {/* Toggle Login/Signup */}
         <p className="text-sm text-center text-gray-400">
           {isLogin ? "Don't have an account?" : "Already have an account?"}
           <button
@@ -225,7 +285,8 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
               setIsLogin(!isLogin);
               setError("");
             }}
-            className="ml-2 font-medium text-blue-400 hover:underline"
+            disabled={isLoading}
+            className="ml-2 font-medium text-blue-400 hover:underline disabled:opacity-50"
           >
             {isLogin ? "Sign Up" : "Login"}
           </button>
@@ -235,4 +296,4 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
   );
 };
 
-export default AuthComponent
+export default AuthComponent;
