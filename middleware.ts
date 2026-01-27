@@ -4,14 +4,18 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const response = NextResponse.next();
 
-  // 1. Forcefully delete the blocking header
+  // Allow iframe embedding
   response.headers.delete('x-frame-options');
-
-  // 2. Explicitly allow embedding on ANY site
   response.headers.set('Content-Security-Policy', "frame-ancestors *;");
-  
-  // 3. (Optional) Set Access-Control for good measure
+
+  // IMPORTANT: Do NOT set Cross-Origin-Opener-Policy headers
+  // Firebase Auth requires popup communication via window.closed
+  // Setting COOP would block Firebase popup authentication
+
+  // Allow cross-origin requests
   response.headers.set('Access-Control-Allow-Origin', '*');
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   return response;
 }

@@ -18,6 +18,7 @@ import ChatBubble from './ChatBubble';
 import { BrainCircuit, Loader2 } from 'lucide-react';
 import { MenuIcon, UserIcon, LogoutIcon, BotIcon } from './Icons';
 import ErrorBoundary from './ErrorBoundary';
+import ModelSelector, { useModelSelection } from './ModelSelector'; // Added ModelSelector import
 
 // --- OPTIMIZED COMPONENTS ---
 
@@ -44,7 +45,7 @@ export const useSmoothScroll = () => {
       });
     }
   }, []);
-  
+
   return { scrollToBottom };
 };
 
@@ -58,7 +59,7 @@ export const useMobileKeyboard = () => {
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', handleResize);
       handleResize();
-      
+
       return () => {
         window.visualViewport?.removeEventListener('resize', handleResize);
       };
@@ -118,6 +119,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
   const { chats, currentChatId, setCurrentChatId, createNewChat } = useChats(user?.uid, db);
   const { contextFiles } = useContextFiles(user?.uid, db);
   const { messages, setMessages } = useMessages(user?.uid, currentChatId, db);
+  const { selectedModel, setSelectedModel } = useModelSelection(); // Model selection hook
 
   const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -132,8 +134,8 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  
-  // FIXED: Store chat ID with streaming message to prevent race conditions
+
+  // Store chat ID with streaming message to prevent race conditions
   const streamingMessageRef = useRef<{ message: Message; chatId: string } | null>(null);
 
   const { scrollToBottom } = useSmoothScroll();
@@ -143,27 +145,26 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     scrollToBottom();
   }, [messages, streamingMessage, scrollToBottom]);
 
-  // FIXED: Save final streaming message with correct chat ID
+  // Save final streaming message with correct chat ID
   useEffect(() => {
     const saveFinalMessage = async () => {
       if (!isLoading && streamingMessageRef.current) {
         const { message: finalMessage, chatId: targetChatId } = streamingMessageRef.current;
-        
+
         if (finalMessage.text.trim() && targetChatId) {
           try {
             await addMessage(db, user.uid, targetChatId, finalMessage);
             console.log('Saved final message to chat:', targetChatId);
           } catch (error) {
             console.error('Error saving final message:', error);
-            // TODO: Implement retry logic
           }
         }
-        
+
         setStreamingMessage(null);
         streamingMessageRef.current = null;
       }
     };
-    
+
     saveFinalMessage();
   }, [isLoading, user.uid, db]);
 
@@ -219,7 +220,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     const chatRef = doc(db, 'users', user.uid, 'chats', chatId);
     await updateDoc(chatRef, { title: newTitle.trim() });
   }, [db, user.uid]);
-  
+
   const handleStopGenerating = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -267,13 +268,14 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       alert((error as Error).message);
     }
   }, [user]);
-  
+
   const handlePromptClick = useCallback((prompt: { title: string }) => {
     setInput(prompt.title);
     const textarea = document.querySelector('textarea');
     if (textarea) textarea.focus();
   }, []);
 
+  // Corrected function signature: 2 args, uses selectedModel from state
   const handleSendMessage = useCallback(async (e: FormEvent, taskType: 'auto' | 'daily' | 'coding') => {
     e.preventDefault();
     if ((!input.trim() && attachments.length === 0) || isLoading) return;
@@ -323,6 +325,8 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       formData.append("taskType", taskType);
       formData.append("context", isContextActive ? context : "");
       formData.append("history", JSON.stringify(messages));
+      // Using the selectedModel from state here
+      formData.append("model", selectedModel);
 
       if (isContextActive && contextFiles.length > 0) {
         const contextFileUrls = contextFiles.map(f => f.url);
@@ -365,7 +369,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullText = '';
-      
+
       // OPTIMIZATION: Debounced updates
       let updateTimer: NodeJS.Timeout | null = null;
       const DEBOUNCE_MS = 50;
@@ -387,7 +391,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
               const delta = parsed.choices?.[0]?.delta?.content;
               if (delta) {
                 fullText += delta;
-                
+
                 // Debounce state updates
                 if (updateTimer) clearTimeout(updateTimer);
                 updateTimer = setTimeout(() => {
@@ -403,14 +407,14 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
 
       // Clear any pending timer and do final update
       if (updateTimer) clearTimeout(updateTimer);
-      
+
       const finalMessage = { id: aiMessageId, text: fullText, sender: "ai" as const };
       setStreamingMessage(finalMessage);
-      
+
       // FIXED: Store with chat ID to prevent race condition
-      streamingMessageRef.current = { 
-        message: finalMessage, 
-        chatId: tempChatId 
+      streamingMessageRef.current = {
+        message: finalMessage,
+        chatId: tempChatId
       };
 
     } catch (error) {
@@ -427,12 +431,12 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
           sender: "ai" as const
         };
         setStreamingMessage(errorMessage);
-        
+
         // Also store error message for saving
         if (tempChatId) {
-          streamingMessageRef.current = { 
-            message: errorMessage, 
-            chatId: tempChatId 
+          streamingMessageRef.current = {
+            message: errorMessage,
+            chatId: tempChatId
           };
         }
       }
@@ -440,7 +444,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, [input, attachments, isLoading, currentChatId, db, user, context, isContextActive, contextFiles, messages, setMessages, setCurrentChatId]);
+  }, [input, attachments, isLoading, currentChatId, db, user, context, isContextActive, contextFiles, messages, setMessages, setCurrentChatId, selectedModel]); // Added selectedModel dependency
 
   // Memoize message list to prevent unnecessary re-renders
   const messageList = useMemo(() => (
@@ -480,12 +484,16 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
           </button>
           <h1 className="font-semibold text-lg">AuraIQ</h1>
           <div className="flex items-center gap-2">
+
+            {/* Context Panel Button */}
             <button
               onClick={() => setIsContextPanelOpen(true)}
               className="p-2 rounded-full hover:bg-gray-800 active:bg-gray-700 transition-colors"
             >
               <BrainCircuit className="w-6 h-6 text-gray-400" />
             </button>
+
+            {/* Profile Menu */}
             <div className="relative">
               <button
                 onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
@@ -495,8 +503,8 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
               </button>
               {isProfileMenuOpen && (
                 <>
-                  <div 
-                    className="fixed inset-0 z-10" 
+                  <div
+                    className="fixed inset-0 z-10"
                     onClick={() => setIsProfileMenuOpen(false)}
                   />
                   <div className="absolute right-0 mt-2 w-48 bg-[#1e1f20] rounded-lg shadow-xl z-20 overflow-hidden">
@@ -517,13 +525,15 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
           </div>
         </header>
 
+
+
         {rateLimitInfo.remaining < 5 && (
           <div className="flex-shrink-0 bg-yellow-900/50 text-yellow-200 px-4 py-2 text-sm text-center">
             ⚠️ {rateLimitInfo.remaining} requests remaining this minute
           </div>
         )}
 
-        <div 
+        <div
           ref={scrollContainerRef}
           id="chat-container"
           className="chat-messages flex-1 overflow-y-auto overscroll-contain"
@@ -547,7 +557,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
                     <TypingIndicator />
                   )
                 )}
-                
+
                 <div className="h-4 md:h-8" />
               </>
             )}

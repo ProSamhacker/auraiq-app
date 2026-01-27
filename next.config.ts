@@ -2,24 +2,12 @@ import type { NextConfig } from 'next';
 import withPWAInit from '@ducanh2912/next-pwa';
 
 const nextConfig: NextConfig = {
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'Cross-Origin-Opener-Policy',
-            // CHANGE THIS VALUE:
-            value: 'same-origin-allow-popups', 
-          },
-          {
-            key: 'Cross-Origin-Embedder-Policy',
-            value: 'credentialless', 
-          },
-        ],
-      },
-    ];
-  },
+  // Removed Cross-Origin headers that block Firebase popup authentication
+  // Firebase requires popup windows to communicate via window.closed and postMessage
+  // Setting COOP or COEP headers prevents this communication
+
+  // If you need these headers for other features in the future,
+  // you'll need to configure them per-route to exclude auth pages
 };
 
 const withPWA = withPWAInit({

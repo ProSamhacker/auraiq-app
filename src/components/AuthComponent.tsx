@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, FC, FormEvent, useEffect } from "react";
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   Auth,
   GoogleAuthProvider,
   signInWithPopup,
@@ -28,12 +28,12 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
   // FIXED: Better redirect result handling
   useEffect(() => {
     let isMounted = true;
-    
+
     const handleRedirect = async () => {
       try {
         setIsLoading(true);
         const result = await getRedirectResult(auth);
-        
+
         if (result && isMounted) {
           console.log("✅ Redirect sign-in successful:", result.user.email);
           // User will be automatically redirected by onAuthStateChanged
@@ -87,7 +87,7 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
     }
   };
 
-  // FIXED: Smart Google Authentication
+  // Enhanced Google Authentication with better error handling
   const handleGoogleLogin = async () => {
     setError("");
     setIsLoading(true);
@@ -96,19 +96,16 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({
         prompt: 'select_account',
-        // FIXED: Add these for better reliability
         display: 'popup',
       });
 
-      // FIXED: Better method detection
+      // Determine authentication method based on environment
       let shouldUsePopup = true;
-      
+
       if (isInIframe) {
-        // Always use popup in iframe
         shouldUsePopup = true;
         console.log("🔧 Using popup (iframe detected)");
       } else if (isMobile) {
-        // Use redirect on mobile for better UX
         shouldUsePopup = false;
         console.log("🔧 Using redirect (mobile detected)");
       }
@@ -119,30 +116,51 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
           console.log("✅ Popup sign-in successful:", result.user.email);
         } catch (popupError: any) {
           console.error("❌ Popup error:", popupError);
-          
-          // Handle specific popup errors
+
+          // Enhanced error handling with helpful messages
           if (popupError.code === 'auth/popup-blocked') {
-            setError("Popup blocked. Please allow popups and try again, or use email sign-in.");
+            setError("🚫 Popup blocked by browser. Please allow popups for this site and try again, or use email sign-in below.");
           } else if (popupError.code === 'auth/popup-closed-by-user') {
-            setError("Sign-in cancelled.");
+            setError("Sign-in cancelled. Click Google again to retry, or use email/password below.");
           } else if (popupError.code === 'auth/cancelled-popup-request') {
             // User opened multiple popups, ignore this error
             console.log("Multiple popups detected, ignoring...");
+            setIsLoading(false);
+            return;
+          } else if (popupError.code === 'auth/unauthorized-domain') {
+            setError("⚠️ Domain not authorized. If you're developing locally, add 'localhost' (without port) to Firebase Console → Authentication → Settings → Authorized domains.");
+          } else if (popupError.code === 'auth/operation-not-allowed') {
+            setError("⚠️ Google Sign-In is not enabled. Please check Firebase Console → Authentication → Sign-in method.");
           } else {
-            // Try redirect as fallback
-            console.log("🔄 Falling back to redirect...");
-            await signInWithRedirect(auth, provider);
+            // Try redirect as fallback for other errors
+            console.log("🔄 Popup failed, falling back to redirect...");
+            try {
+              await signInWithRedirect(auth, provider);
+              // Don't set loading to false - redirect will happen
+              return;
+            } catch (redirectError: any) {
+              console.error("❌ Redirect also failed:", redirectError);
+              setError(`Sign-in failed: ${redirectError.message?.replace("Firebase: ", "") || "Unknown error"}. Please try email/password sign-in.`);
+            }
           }
         }
       } else {
-        // Use redirect
+        // Use redirect for mobile
         await signInWithRedirect(auth, provider);
         // Don't set loading to false - redirect will happen
         return;
       }
     } catch (err: any) {
       console.error("❌ Google auth error:", err);
-      setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed");
+
+      // Provide helpful error messages
+      if (err.code === 'auth/unauthorized-domain') {
+        setError("⚠️ This domain isn't authorized. Add it to Firebase Console → Authentication → Settings → Authorized domains.");
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError("⚠️ Google Sign-In is not enabled in your Firebase project.");
+      } else {
+        setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed. Please try email/password sign-in.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -166,7 +184,7 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
           <h1 className="text-4xl font-bold text-white mb-2">AuraIQ</h1>
           <p className="text-gray-400">Your intelligent assistant awaits</p>
         </div>
-        
+
         {/* Error Display */}
         {error && (
           <div className="p-4 bg-red-900/30 border border-red-700/50 rounded-lg flex items-start gap-3">
@@ -182,7 +200,7 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
             </div>
           </div>
         )}
-        
+
         {/* Email/Password Form */}
         <form className="space-y-6" onSubmit={handleSubmit}>
           <input
@@ -214,7 +232,7 @@ const AuthComponent: FC<AuthComponentProps> = ({ auth }) => {
               className="w-full px-4 py-3 text-gray-200 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-all"
             />
           )}
-          
+
           <button
             type="submit"
             disabled={isLoading}

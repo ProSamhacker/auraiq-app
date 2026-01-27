@@ -4,7 +4,7 @@
 import { FC, useState } from 'react';
 import { Brain, Zap, Sparkles, Settings, ChevronDown, Check } from 'lucide-react';
 
-export type AIModel = 
+export type AIModel =
   | 'gemini-flash'    // Fast, daily tasks
   | 'gemini-pro'      // Complex, coding tasks
   | 'iq1-base'        // Your custom model
@@ -32,29 +32,29 @@ const MODELS: ModelInfo[] = [
   },
   {
     id: 'iq1-base',
-    name: 'IQ1 Model',
-    description: 'Your custom-trained model with specialized capabilities',
+    name: 'Daily Chat',
+    description: 'Llama 3.1 8B - Fast & free via Groq',
     icon: <Brain className="w-5 h-5" />,
-    speed: 'medium',
-    capabilities: ['Custom trained', 'Domain specific', 'Optimized responses'],
+    speed: 'fast',
+    capabilities: ['Lightning fast', 'General knowledge', 'Free unlimited'],
     color: 'bg-gradient-to-r from-blue-500 to-cyan-500',
   },
   {
     id: 'gemini-flash',
-    name: 'Gemini Flash',
-    description: 'Lightning-fast responses for everyday tasks',
+    name: 'Daily Model',
+    description: 'Llama 3.1 8B Instant - Groq powered',
     icon: <Zap className="w-5 h-5" />,
     speed: 'fast',
-    capabilities: ['Quick answers', 'General knowledge', 'Efficient'],
+    capabilities: ['Instant responses', '131K context', 'Free'],
     color: 'bg-gradient-to-r from-yellow-500 to-orange-500',
   },
   {
     id: 'gemini-pro',
-    name: 'Gemini Pro',
-    description: 'Advanced reasoning for complex problems and coding',
+    name: 'Pro Coder',
+    description: 'Llama 3.3 70B - Advanced coding & reasoning',
     icon: <Settings className="w-5 h-5" />,
-    speed: 'slow',
-    capabilities: ['Deep reasoning', 'Code generation', 'Complex analysis'],
+    speed: 'medium',
+    capabilities: ['Best for coding', 'Deep reasoning', '131K context'],
     color: 'bg-gradient-to-r from-green-500 to-emerald-500',
   },
 ];
@@ -65,10 +65,10 @@ interface ModelSelectorProps {
   className?: string;
 }
 
-const ModelSelector: FC<ModelSelectorProps> = ({ 
-  selectedModel, 
+const ModelSelector: FC<ModelSelectorProps> = ({
+  selectedModel,
   onModelChange,
-  className = '' 
+  className = ''
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -89,15 +89,14 @@ const ModelSelector: FC<ModelSelectorProps> = ({
             {currentModel.name}
           </span>
           <span className="text-xs text-gray-400">
-            {currentModel.speed === 'fast' ? '⚡ Fast' : 
-             currentModel.speed === 'medium' ? '⚖️ Balanced' : 
-             '🧠 Advanced'}
+            {currentModel.speed === 'fast' ? '⚡ Fast' :
+              currentModel.speed === 'medium' ? '⚖️ Balanced' :
+                '🧠 Advanced'}
           </span>
         </div>
-        <ChevronDown 
-          className={`w-4 h-4 text-gray-400 transition-transform ${
-            isOpen ? 'rotate-180' : ''
-          }`}
+        <ChevronDown
+          className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''
+            }`}
         />
       </button>
 
@@ -105,8 +104,8 @@ const ModelSelector: FC<ModelSelectorProps> = ({
       {isOpen && (
         <>
           {/* Backdrop */}
-          <div 
-            className="fixed inset-0 z-40" 
+          <div
+            className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
 
@@ -129,9 +128,8 @@ const ModelSelector: FC<ModelSelectorProps> = ({
                     onModelChange(model.id);
                     setIsOpen(false);
                   }}
-                  className={`w-full p-4 text-left hover:bg-gray-700/50 transition-all border-b border-gray-700/50 last:border-b-0 ${
-                    selectedModel === model.id ? 'bg-gray-700/30' : ''
-                  }`}
+                  className={`w-full p-4 text-left hover:bg-gray-700/50 transition-all border-b border-gray-700/50 last:border-b-0 ${selectedModel === model.id ? 'bg-gray-700/30' : ''
+                    }`}
                 >
                   <div className="flex items-start gap-3">
                     <div className={`p-2 rounded-lg ${model.color} text-white flex-shrink-0`}>
@@ -169,13 +167,12 @@ const ModelSelector: FC<ModelSelectorProps> = ({
                           {[...Array(3)].map((_, i) => (
                             <div
                               key={i}
-                              className={`w-1.5 h-3 rounded-full ${
-                                (model.speed === 'fast' && i < 3) ||
+                              className={`w-1.5 h-3 rounded-full ${(model.speed === 'fast' && i < 3) ||
                                 (model.speed === 'medium' && i < 2) ||
                                 (model.speed === 'slow' && i < 1)
-                                  ? 'bg-blue-400'
-                                  : 'bg-gray-700'
-                              }`}
+                                ? 'bg-blue-400'
+                                : 'bg-gray-700'
+                                }`}
                             />
                           ))}
                         </div>
@@ -214,7 +211,7 @@ export function useModelSelection() {
 
     // Auto-selection logic
     const codingKeywords = ['code', 'function', 'debug', 'error', 'implement', 'algorithm'];
-    const hasCodingKeyword = codingKeywords.some(kw => 
+    const hasCodingKeyword = codingKeywords.some(kw =>
       input.toLowerCase().includes(kw)
     );
 
