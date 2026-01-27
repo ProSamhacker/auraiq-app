@@ -233,11 +233,24 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
     try {
       const token = await user.getIdToken();
 
-      // 1. Upload file directly to Vercel Blob (client-side)
+      // 1. Request upload token from server
+      const tokenResponse = await fetch('/api/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'request-upload-token', token }),
+      });
+
+      if (!tokenResponse.ok) {
+        throw new Error('Failed to get upload token');
+      }
+
+      const { uploadToken } = await tokenResponse.json();
+
+      // 2. Upload file directly to Vercel Blob with upload token
       const blob = await upload(file.name, file, {
         access: 'public',
         handleUploadUrl: '/api/upload-url',
-        clientPayload: JSON.stringify({ token }),
+        clientPayload: JSON.stringify({ uploadToken }),
       });
 
       console.log(`✅ Uploaded ${file.name} to Blob:`, blob.url);
@@ -354,13 +367,29 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       const uploadedFileUrls: string[] = [];
       if (tempAttachments.length > 0) {
         const token = await user.getIdToken();
+
         for (const file of tempAttachments) {
           try {
+            // Step 1: Request upload token
+            const tokenResponse = await fetch('/api/upload-url', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'request-upload-token', token }),
+            });
+
+            if (!tokenResponse.ok) {
+              throw new Error('Failed to get upload token');
+            }
+
+            const { uploadToken } = await tokenResponse.json();
+
+            // Step 2: Upload file with token
             const blob = await upload(file.name, file, {
               access: 'public',
               handleUploadUrl: '/api/upload-url',
-              clientPayload: JSON.stringify({ token }),
+              clientPayload: JSON.stringify({ uploadToken }),
             });
+
             uploadedFileUrls.push(blob.url);
             console.log(`✅ Uploaded ${file.name} to ${blob.url}`);
           } catch (uploadError) {
