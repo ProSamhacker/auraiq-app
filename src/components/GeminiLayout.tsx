@@ -18,7 +18,8 @@ import ChatBubble from './ChatBubble';
 import { BrainCircuit, Loader2 } from 'lucide-react';
 import { MenuIcon, UserIcon, LogoutIcon, BotIcon } from './Icons';
 import ErrorBoundary from './ErrorBoundary';
-import ModelSelector, { useModelSelection } from './ModelSelector'; // Added ModelSelector import
+import ModelSelector, { useModelSelection } from './ModelSelector';
+import { upload } from '@vercel/blob/client'; // Added for client-side file upload
 
 // --- OPTIMIZED COMPONENTS ---
 
@@ -229,18 +230,33 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
   }, []);
 
   const handleFileUpload = useCallback(async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
     try {
       const token = await user.getIdToken();
+
+      // 1. Upload file directly to Vercel Blob (client-side)
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/upload-url',
+      });
+
+      console.log(`✅ Uploaded ${file.name} to Blob:`, blob.url);
+
+      // 2. Save metadata to Firestore
       const response = await fetch('/api/context/upload', {
         method: 'POST',
-        body: formData,
-        headers: { Authorization: `Bearer ${token}` }
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileUrl: blob.url
+        }),
       });
+
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'File upload failed');
+        throw new Error(errorData.error || 'Failed to save file metadata');
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -333,9 +349,25 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
         formData.append("contextFileUrls", JSON.stringify(contextFileUrls));
       }
 
-      tempAttachments.forEach(file => {
-        formData.append("files", file);
-      });
+      // Client-side file upload to Vercel Blob to bypass 4.5MB serverless limit
+      const uploadedFileUrls: string[] = [];
+      if (tempAttachments.length > 0) {
+        for (const file of tempAttachments) {
+          try {
+            const blob = await upload(file.name, file, {
+              access: 'public',
+              handleUploadUrl: '/api/upload-url',
+            });
+            uploadedFileUrls.push(blob.url);
+            console.log(`✅ Uploaded ${file.name} to ${blob.url}`);
+          } catch (uploadError) {
+            console.error(`Failed to upload ${file.name}:`, uploadError);
+            throw new Error(`File upload failed for ${file.name}`);
+          }
+        }
+        // Send uploaded file URLs instead of files
+        formData.append("uploadedFileUrls", JSON.stringify(uploadedFileUrls));
+      }
 
       const token = await user.getIdToken();
 

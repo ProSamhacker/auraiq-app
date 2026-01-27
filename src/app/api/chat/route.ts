@@ -332,7 +332,8 @@ export async function POST(req: NextRequest) {
     const context = formData.get('context') as string;
     const historyString = formData.get('history') as string;
     const history = JSON.parse(historyString || '[]');
-    const files = formData.getAll('files') as File[];
+    const files = formData.getAll('files') as File[]; // Legacy support
+    const uploadedFileUrlsString = formData.get('uploadedFileUrls') as string; // New: pre-uploaded files
     const contextFileUrlsString = formData.get('contextFileUrls') as string;
 
     // 4. FILE VALIDATION
@@ -442,7 +443,57 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Process uploaded files
+
+    // Process pre-uploaded files (client-side direct upload)
+    if (uploadedFileUrlsString) {
+      const uploadedFileUrls = JSON.parse(uploadedFileUrlsString) as string[];
+      if (uploadedFileUrls.length > 0) {
+        const uploadedFilePromises = uploadedFileUrls.map(async (url) => {
+          try {
+            const fileName = decodeURIComponent(url.split('/').pop() || 'uploaded file');
+            const response = await fetch(url);
+            if (response.ok) {
+              const contentType = response.headers.get('content-type');
+              const buffer = await response.arrayBuffer();
+
+              if (contentType && contentType.startsWith('image/')) {
+                hasImage = true;
+                imageUrls.push(url);
+              } else if (contentType === 'application/pdf') {
+                const { imageUrls: pdfImages, text } = await extractPDFContent(new Uint8Array(buffer));
+                if (text) textContent += `\n\n--- File: ${fileName} ---\n${text}\n--- End ---\n`;
+                if (pdfImages.length > 0) { hasImage = true; imageUrls.push(...pdfImages); }
+              } else if (contentType?.includes('wordprocessingml')) {
+                const { imageUrls: docImages, text } = await extractDOCXImages(Buffer.from(buffer));
+                if (text) textContent += `\n\n--- File: ${fileName} ---\n${text}\n--- End ---\n`;
+                if (docImages.length > 0) { hasImage = true; imageUrls.push(...docImages); }
+              } else if (contentType?.includes('presentationml')) {
+                const { imageUrls: pptImages, text } = await extractPPTXImages(Buffer.from(buffer));
+                if (text) textContent += `\n\n--- File: ${fileName} ---\n${text}\n--- End ---\n`;
+                if (pptImages.length > 0) { hasImage = true; imageUrls.push(...pptImages); }
+              } else if (contentType?.includes('spreadsheetml')) {
+                const workbook = XLSX.read(buffer, { type: 'buffer' });
+                let content = '';
+                workbook.SheetNames.forEach(sheetName => {
+                  const worksheet = workbook.Sheets[sheetName];
+                  content += `Sheet: ${sheetName}\n` + XLSX.utils.sheet_to_csv(worksheet) + '\n\n';
+                });
+                if (content) textContent += `\n\n--- File: ${fileName} ---\n${content}\n--- End ---\n`;
+              } else {
+                // Text-based file
+                const text = new TextDecoder('utf-8').decode(buffer);
+                if (text) textContent += `\n\n--- File: ${fileName} ---\n${text}\n--- End ---\n`;
+              }
+            }
+          } catch (e) {
+            console.error(`Failed to fetch uploaded file ${url}`, e);
+          }
+        });
+        await Promise.all(uploadedFilePromises);
+      }
+    }
+
+    // Process uploaded files (legacy support for old clients)
     if (files.length > 0) {
       const filePromises = files.map(async (file) => {
         if (file.type.startsWith('image/')) {

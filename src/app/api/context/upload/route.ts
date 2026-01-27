@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put } from '@vercel/blob';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
-import { randomUUID } from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,24 +11,19 @@ export async function POST(request: NextRequest) {
     const decodedToken = await adminAuth.verifyIdToken(authToken);
     const userId = decodedToken.uid;
 
-    // 2. Parse the file from the FormData
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
-    if (!file) {
-      return NextResponse.json({ error: 'No file provided.' }, { status: 400 });
+    // 2. Parse the request (now JSON with pre-uploaded file URL)
+    const body = await request.json();
+    const { fileName, fileUrl } = body;
+
+    if (!fileName || !fileUrl) {
+      return NextResponse.json({ error: 'Missing fileName or fileUrl' }, { status: 400 });
     }
 
-    // 3. Upload the file to Vercel Blob
-    const uniqueFilename = `${randomUUID()}-${file.name}`;
-    const blob = await put(`context-files/${userId}/${uniqueFilename}`, file, {
-      access: 'public',
-    });
-
-    // 4. Save the file metadata to Firestore
+    // 3. Save the file metadata to Firestore
     const fileRef = adminDb.collection('users').doc(userId).collection('contextFiles').doc();
     await fileRef.set({
-      name: file.name,
-      url: blob.url,
+      name: fileName,
+      url: fileUrl,
       userId: userId,
       uploadedAt: new Date().toISOString(),
     });
@@ -38,9 +31,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, fileId: fileRef.id });
 
   } catch (error) {
-    console.error('Context file upload error:', error);
+    console.error('Context file metadata save error:', error);
     if ((error as Error).message.includes('token')) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
