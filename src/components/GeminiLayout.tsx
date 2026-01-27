@@ -237,6 +237,7 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       const blob = await upload(file.name, file, {
         access: 'public',
         handleUploadUrl: '/api/upload-url',
+        clientPayload: JSON.stringify({ token }),
       });
 
       console.log(`✅ Uploaded ${file.name} to Blob:`, blob.url);
@@ -352,11 +353,13 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       // Client-side file upload to Vercel Blob to bypass 4.5MB serverless limit
       const uploadedFileUrls: string[] = [];
       if (tempAttachments.length > 0) {
+        const token = await user.getIdToken();
         for (const file of tempAttachments) {
           try {
             const blob = await upload(file.name, file, {
               access: 'public',
               handleUploadUrl: '/api/upload-url',
+              clientPayload: JSON.stringify({ token }),
             });
             uploadedFileUrls.push(blob.url);
             console.log(`✅ Uploaded ${file.name} to ${blob.url}`);

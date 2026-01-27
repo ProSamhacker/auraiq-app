@@ -4,17 +4,29 @@ import { adminAuth } from '@/lib/firebase-admin';
 
 export async function POST(request: NextRequest) {
     try {
-        // 1. Authenticate the user
-        const authToken = request.headers.get('Authorization')?.split('Bearer ')[1];
-        if (!authToken) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        // 1. Parse the request body to get clientPayload with auth token
+        const body = await request.json();
+
+        // Extract token from clientPayload
+        let authToken: string | undefined;
+        if (body.clientPayload) {
+            try {
+                const payload = JSON.parse(body.clientPayload);
+                authToken = payload.token;
+            } catch (e) {
+                console.error('Failed to parse clientPayload:', e);
+            }
         }
 
+        if (!authToken) {
+            return NextResponse.json({ error: 'Unauthorized - No token provided' }, { status: 401 });
+        }
+
+        // 2. Verify the Firebase auth token
         const decodedToken = await adminAuth.verifyIdToken(authToken);
         const userId = decodedToken.uid;
 
-        // 2. Handle the upload request to generate presigned URL
-        const body = await request.json();
+        // 3. Handle the upload request to generate presigned URL
         const jsonResponse = await handleUpload({
             body,
             request,
@@ -40,7 +52,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(jsonResponse);
     } catch (error) {
         console.error('Upload URL generation error:', error);
-        if ((error as Error).message.includes('token')) {
+        if ((error as Error).message.includes('token') || (error as Error).message.includes('auth')) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
         return NextResponse.json({ error: 'Failed to generate upload URL' }, { status: 500 });
