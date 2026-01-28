@@ -160,7 +160,7 @@ async function extractPPTXImages(buffer: Buffer): Promise<{ imageUrls: string[],
           const mimeType = extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : `image/${extension}`;
           const uniqueFilename = `${randomUUID()}.${extension}`;
           const imageFile = new File([new Uint8Array(imageBuffer)], uniqueFilename, { type: mimeType });
-          const blob = await put(uniqueFilename, imageFile, { access: 'public' });
+          const blob = await put(uniqueFilename, imageFile, { access: 'public', addRandomSuffix: true });
           imageUrls.push(blob.url);
         } catch (e) { console.error('Error processing PPTX image:', e); }
       }
@@ -185,7 +185,7 @@ async function extractDOCXImages(buffer: Buffer): Promise<{ imageUrls: string[],
         const mimeType = extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : `image/${extension}`;
         const uniqueFilename = `${randomUUID()}.${extension}`;
         const imageFile = new File([new Uint8Array(imageBuffer)], uniqueFilename, { type: mimeType });
-        const blob = await put(uniqueFilename, imageFile, { access: 'public' });
+        const blob = await put(uniqueFilename, imageFile, { access: 'public', addRandomSuffix: true });
         imageUrls.push(blob.url);
       }
     }
@@ -446,77 +446,50 @@ export async function POST(req: NextRequest) {
 
     // Process pre-uploaded files (client-side direct upload)
     if (uploadedFileUrlsString) {
-      try {
-        console.log('📦 Processing uploaded URI string length:', uploadedFileUrlsString.length);
-        const uploadedFileUrls = JSON.parse(uploadedFileUrlsString) as string[];
-        console.log('📦 Parsed file URLs:', uploadedFileUrls);
+      const uploadedFileUrls = JSON.parse(uploadedFileUrlsString) as string[];
+      if (uploadedFileUrls.length > 0) {
+        const uploadedFilePromises = uploadedFileUrls.map(async (url) => {
+          try {
+            const fileName = decodeURIComponent(url.split('/').pop() || 'uploaded file');
+            const response = await fetch(url);
+            if (response.ok) {
+              const contentType = response.headers.get('content-type');
+              const buffer = await response.arrayBuffer();
 
-        if (uploadedFileUrls.length > 0) {
-          const uploadedFilePromises = uploadedFileUrls.map(async (url) => {
-            try {
-              const fileName = decodeURIComponent(url.split('/').pop() || 'uploaded file');
-              console.log(`🚀 Fetching uploaded file: ${fileName} from ${url}`);
-
-              const response = await fetch(url);
-              console.log(`📡 Fetch response status for ${fileName}:`, response.status);
-
-              if (response.ok) {
-                const contentType = response.headers.get('content-type');
-                console.log(`📄 File ${fileName} content-type: ${contentType}`);
-                const buffer = await response.arrayBuffer();
-                console.log(`💾 File ${fileName} buffer size: ${buffer.byteLength} bytes`);
-
-                if (contentType && contentType.startsWith('image/')) {
-                  hasImage = true;
-                  imageUrls.push(url);
-                  console.log(`🖼️ Processed image: ${fileName}`);
-                } else if (contentType === 'application/pdf') {
-                  console.log(`📑 Extracting PDF: ${fileName}`);
-                  const { imageUrls: pdfImages, text } = await extractPDFContent(new Uint8Array(buffer));
-                  if (text) textContent += `\n\n--- File: ${fileName} ---\n${text}\n--- End ---\n`;
-                  if (pdfImages.length > 0) { hasImage = true; imageUrls.push(...pdfImages); }
-                  console.log(`✅ Extracted PDF: ${fileName}, text length: ${text?.length || 0}`);
-                } else if (contentType?.includes('wordprocessingml')) {
-                  console.log(`📝 Extracting DOCX: ${fileName}`);
-                  const { imageUrls: docImages, text } = await extractDOCXImages(Buffer.from(buffer));
-                  if (text) textContent += `\n\n--- File: ${fileName} ---\n${text}\n--- End ---\n`;
-                  if (docImages.length > 0) { hasImage = true; imageUrls.push(...docImages); }
-                  console.log(`✅ Extracted DOCX: ${fileName}`);
-                } else if (contentType?.includes('presentationml')) {
-                  console.log(`📊 Extracting PPTX: ${fileName}`);
-                  const { imageUrls: pptImages, text } = await extractPPTXImages(Buffer.from(buffer));
-                  if (text) textContent += `\n\n--- File: ${fileName} ---\n${text}\n--- End ---\n`;
-                  if (pptImages.length > 0) { hasImage = true; imageUrls.push(...pptImages); }
-                  console.log(`✅ Extracted PPTX: ${fileName}, text length: ${text?.length || 0}`);
-                } else if (contentType?.includes('spreadsheetml')) {
-                  console.log(`📈 Extracting Excel: ${fileName}`);
-                  const workbook = XLSX.read(buffer, { type: 'buffer' });
-                  let content = '';
-                  workbook.SheetNames.forEach(sheetName => {
-                    const worksheet = workbook.Sheets[sheetName];
-                    content += `Sheet: ${sheetName}\n` + XLSX.utils.sheet_to_csv(worksheet) + '\n\n';
-                  });
-                  if (content) textContent += `\n\n--- File: ${fileName} ---\n${content}\n--- End ---\n`;
-                  console.log(`✅ Extracted Excel: ${fileName}`);
-                } else {
-                  // Text-based file
-                  console.log(`📄 Extracting text file: ${fileName}`);
-                  const text = new TextDecoder('utf-8').decode(buffer);
-                  if (text) textContent += `\n\n--- File: ${fileName} ---\n${text}\n--- End ---\n`;
-                  console.log(`✅ Extracted text file: ${fileName}`);
-                }
+              if (contentType && contentType.startsWith('image/')) {
+                hasImage = true;
+                imageUrls.push(url);
+              } else if (contentType === 'application/pdf') {
+                const { imageUrls: pdfImages, text } = await extractPDFContent(new Uint8Array(buffer));
+                if (text) textContent += `\n\n--- File: ${fileName} ---\n${text}\n--- End ---\n`;
+                if (pdfImages.length > 0) { hasImage = true; imageUrls.push(...pdfImages); }
+              } else if (contentType?.includes('wordprocessingml')) {
+                const { imageUrls: docImages, text } = await extractDOCXImages(Buffer.from(buffer));
+                if (text) textContent += `\n\n--- File: ${fileName} ---\n${text}\n--- End ---\n`;
+                if (docImages.length > 0) { hasImage = true; imageUrls.push(...docImages); }
+              } else if (contentType?.includes('presentationml')) {
+                const { imageUrls: pptImages, text } = await extractPPTXImages(Buffer.from(buffer));
+                if (text) textContent += `\n\n--- File: ${fileName} ---\n${text}\n--- End ---\n`;
+                if (pptImages.length > 0) { hasImage = true; imageUrls.push(...pptImages); }
+              } else if (contentType?.includes('spreadsheetml')) {
+                const workbook = XLSX.read(buffer, { type: 'buffer' });
+                let content = '';
+                workbook.SheetNames.forEach(sheetName => {
+                  const worksheet = workbook.Sheets[sheetName];
+                  content += `Sheet: ${sheetName}\n` + XLSX.utils.sheet_to_csv(worksheet) + '\n\n';
+                });
+                if (content) textContent += `\n\n--- File: ${fileName} ---\n${content}\n--- End ---\n`;
               } else {
-                console.error(`❌ Failed to fetch ${fileName}: ${response.status} ${response.statusText}`);
+                // Text-based file
+                const text = new TextDecoder('utf-8').decode(buffer);
+                if (text) textContent += `\n\n--- File: ${fileName} ---\n${text}\n--- End ---\n`;
               }
-            } catch (e) {
-              console.error(`❌ Error processing file ${url}:`, e);
             }
-          });
-          await Promise.all(uploadedFilePromises);
-          console.log('✅ All uploaded files processed');
-        }
-      } catch (parseError) {
-        console.error('❌ Error parsing uploadedFileUrlsString:', parseError);
+          } catch (e) {
+            console.error(`Failed to fetch uploaded file ${url}`, e);
+          }
+        });
+        await Promise.all(uploadedFilePromises);
       }
     }
 
@@ -526,7 +499,7 @@ export async function POST(req: NextRequest) {
         if (file.type.startsWith('image/')) {
           hasImage = true;
           const uniqueFilename = `${randomUUID()}-${file.name}`;
-          const blob = await put(uniqueFilename, file, { access: 'public' });
+          const blob = await put(uniqueFilename, file, { access: 'public', addRandomSuffix: true });
           imageUrls.push(blob.url);
         } else if (file.type === 'application/pdf') {
           const buffer = await file.arrayBuffer();
