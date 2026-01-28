@@ -247,7 +247,9 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
       const { uploadToken } = await tokenResponse.json();
 
       // 2. Upload file directly to Vercel Blob with upload token
-      const blob = await upload(file.name, file, {
+      // Add unique suffix to prevent blob conflicts
+      const uniqueFilename = `${Date.now()}-${Math.random().toString(36).substring(7)}-${file.name}`;
+      const blob = await upload(uniqueFilename, file, {
         access: 'public',
         handleUploadUrl: '/api/upload-url',
         clientPayload: JSON.stringify({ uploadToken }),
@@ -384,7 +386,9 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
             const { uploadToken } = await tokenResponse.json();
 
             // Step 2: Upload file with token
-            const blob = await upload(file.name, file, {
+            // Add unique suffix to prevent blob conflicts
+            const uniqueFilename = `${Date.now()}-${Math.random().toString(36).substring(7)}-${file.name}`;
+            const blob = await upload(uniqueFilename, file, {
               access: 'public',
               handleUploadUrl: '/api/upload-url',
               clientPayload: JSON.stringify({ uploadToken }),
