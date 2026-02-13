@@ -197,12 +197,26 @@ async function extractPDFContent(buffer: Uint8Array): Promise<{ imageUrls: strin
   const imageUrls: string[] = [];
   let text = '';
   try {
+    console.log(`📄 Extracting PDF content - Buffer size: ${buffer.byteLength} bytes`);
+
     // First, create a PDF document proxy from the buffer
     const pdf = await getDocumentProxy(buffer);
+    console.log(`✅ PDF proxy created successfully - Pages: ${pdf.numPages}`);
+
     // Then extract text with mergePages option to get a single string
-    const { text: pdfText } = await extractText(pdf, { mergePages: true });
+    const { text: pdfText, totalPages } = await extractText(pdf, { mergePages: true });
     text = pdfText;
-  } catch (e) { console.error('Failed to extract PDF content:', e); }
+
+    console.log(`✅ PDF text extracted - Total pages: ${totalPages}, Text length: ${text.length} characters`);
+    console.log(`📝 First 200 chars: ${text.substring(0, 200)}`);
+
+  } catch (e) {
+    console.error('❌ Failed to extract PDF content:', e);
+    console.error('Error details:', {
+      message: (e as Error).message,
+      stack: (e as Error).stack
+    });
+  }
   return { imageUrls, text };
 }
 
