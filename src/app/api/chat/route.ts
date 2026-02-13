@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from '@vercel/blob';
 import { randomUUID } from "crypto";
-import { extractText } from 'unpdf';
+import { extractText, getDocumentProxy } from 'unpdf';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import AdmZip from 'adm-zip';
@@ -197,8 +197,11 @@ async function extractPDFContent(buffer: Uint8Array): Promise<{ imageUrls: strin
   const imageUrls: string[] = [];
   let text = '';
   try {
-    const { text: pdfText } = await extractText(buffer);
-    text = Array.isArray(pdfText) ? pdfText.join('\n') : pdfText;
+    // First, create a PDF document proxy from the buffer
+    const pdf = await getDocumentProxy(buffer);
+    // Then extract text with mergePages option to get a single string
+    const { text: pdfText } = await extractText(pdf, { mergePages: true });
+    text = pdfText;
   } catch (e) { console.error('Failed to extract PDF content:', e); }
   return { imageUrls, text };
 }
