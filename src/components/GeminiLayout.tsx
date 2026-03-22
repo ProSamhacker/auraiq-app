@@ -3,6 +3,7 @@
 "use client";
 
 import { useState, FC, FormEvent, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { User, Auth, signOut } from 'firebase/auth';
 import { Firestore, collection, addDoc, doc, deleteDoc, updateDoc, getDocs } from 'firebase/firestore';
 import { Message } from '../lib/types';
@@ -145,6 +146,15 @@ const GeminiLayout: FC<GeminiLayoutProps> = ({ user, auth, db }) => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, streamingMessage, scrollToBottom]);
+
+  const searchParams = useSearchParams();
+  const initialPrompt = searchParams.get('prompt');
+
+  useEffect(() => {
+    if (initialPrompt && !input && messages.length === 0) {
+      setInput(initialPrompt);
+    }
+  }, [initialPrompt]);
 
   // Save final streaming message with correct chat ID
   useEffect(() => {

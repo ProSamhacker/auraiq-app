@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
         .collection('contextFiles')
         .get();
 
-      contextFilesSnapshot.forEach(doc => {
+      contextFilesSnapshot.forEach((doc: any) => {
         const url = doc.data().url;
         if (url) referencedUrls.add(url);
       });
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
           .collection('messages')
           .get();
         
-        messagesSnapshot.forEach(msgDoc => {
+        messagesSnapshot.forEach((msgDoc: any) => {
           const msg = msgDoc.data() as MessageData;
           const urlRegex = /https:\/\/[\w.-]+\.public\.blob\.vercel-storage\.com\/[^\s\])]+/g;
           const matches = msg.text?.match(urlRegex);

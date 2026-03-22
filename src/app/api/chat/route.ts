@@ -535,7 +535,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Input is empty." }, { status: 400 });
     }
 
-    // 6. THREE-LANE MODEL ROUTING (Groq + OpenRouter)
+    // THREE-LANE MODEL ROUTING (Groq + OpenRouter)
     const abortController = new AbortController();
 
     // Determine which lane/model to use
@@ -604,7 +604,9 @@ export async function POST(req: NextRequest) {
     // Prepare system prompt
     const basePrompt = `You are AuraIQ, a helpful and intelligent AI assistant.
 
-**CRITICAL**: When users upload files (PDF, PPT, Word, Excel), content is auto-extracted and included in the message marked with "--- Context: filename ---". You CAN see and analyze this content directly. DO NOT say you cannot access files.
+**CRITICAL**: When users upload files (PDF, PPT, Word, Excel), content is auto-extracted and included in the message marked with "--- Context: filename ---" or "--- File: filename ---". You CAN see and analyze this content directly. DO NOT say you cannot access files.
+
+**IMPORTANT**: Do NOT mention or acknowledge these context markers (--- Context: ---, --- File: ---, --- End ---) in your responses. Simply analyze the content directly without referencing the formatting markers.
 
 ALWAYS format your responses using GitHub-flavored Markdown.
 - Use lists for items.

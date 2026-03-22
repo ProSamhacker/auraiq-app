@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { User, onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
 import AuthComponent from "../components/AuthComponent";
@@ -51,7 +51,9 @@ export default function Home() {
   return (
     <ErrorBoundary>
       {user ? (
-        <GeminiLayout user={user} auth={auth} db={db} />
+        <Suspense fallback={<div className="flex items-center justify-center h-screen bg-[#131314] text-white">Loading Interface...</div>}>
+          <GeminiLayout user={user} auth={auth} db={db} />
+        </Suspense>
       ) : (
         <AuthComponent auth={auth} />
       )}
