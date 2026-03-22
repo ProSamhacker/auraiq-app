@@ -42,4 +42,5 @@ try {
   db = {} as Firestore;
 }
 
+export const isFirebaseConfigured = !!firebaseConfig.apiKey;
 export { app, auth, db };

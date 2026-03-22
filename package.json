@@ -46,6 +46,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/xlsx": "^0.0.35",
     "autoprefixer": "^10.4.21",
+    "baseline-browser-mapping": "^2.10.10",
     "eslint": "^9",
     "eslint-config-next": "^16.0.7",
     "globals": "^16.5.0",
