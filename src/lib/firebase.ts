@@ -25,12 +25,20 @@ try {
     db = getFirestore(app);
   } else {
     console.warn("No NEXT_PUBLIC_FIREBASE_API_KEY found. Skipping Firebase initialization. Providing mock instances to prevent build errors.");
-    auth = {} as Auth;
+    auth = {
+      onAuthStateChanged: (cb: any) => { cb(null); return () => {}; },
+      currentUser: null,
+      signOut: async () => {},
+    } as unknown as Auth;
     db = {} as Firestore;
   }
 } catch (error) {
   console.error("Firebase Initialization Error:", error);
-  auth = {} as Auth;
+  auth = {
+    onAuthStateChanged: (cb: any) => { cb(null); return () => {}; },
+    currentUser: null,
+    signOut: async () => {},
+  } as unknown as Auth;
   db = {} as Firestore;
 }
 
