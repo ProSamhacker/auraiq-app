@@ -13,7 +13,25 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+let app: FirebaseApp | any;
+let auth: Auth | any;
+let db: Firestore | any;
 
-export const auth: Auth = getAuth(app);
-export const db: Firestore = getFirestore(app);
+try {
+  // Only initialize if an API key is present, preventing auth/invalid-api-key build errors
+  if (firebaseConfig.apiKey) {
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } else {
+    console.warn("No NEXT_PUBLIC_FIREBASE_API_KEY found. Skipping Firebase initialization. Providing mock instances to prevent build errors.");
+    auth = {} as Auth;
+    db = {} as Firestore;
+  }
+} catch (error) {
+  console.error("Firebase Initialization Error:", error);
+  auth = {} as Auth;
+  db = {} as Firestore;
+}
+
+export { app, auth, db };
